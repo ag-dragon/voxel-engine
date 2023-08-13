@@ -1,5 +1,5 @@
 use voxel_engine::run;
 
 fn main() {
-    run();
+    futures::executor::block_on(run());
 }
