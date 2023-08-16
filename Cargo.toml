@@ -11,3 +11,4 @@ wgpu = "0.17"
 futures = "0.3.28"
 bytemuck = { version = "*", features = [ "derive" ] }
 image = "0.24.7"
+nalgebra = "0.32.3"
