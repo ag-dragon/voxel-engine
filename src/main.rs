@@ -1,3 +1,6 @@
+mod gpu_state;
+use gpu_state::GpuState;
+
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
@@ -166,12 +169,7 @@ impl CameraController {
 }
 
 struct State {
-    surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    window: Window,
+    gpu: GpuState,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
@@ -185,53 +183,7 @@ struct State {
 }
 
 impl State {
-    async fn new(window: Window) -> Self {
-        let size = window.inner_size();
-
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            dx12_shader_compiler: Default::default(),
-        });
-
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-        let adapter = instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            },
-        ).await.unwrap();
-
-        let (device, queue) = adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                features: wgpu::Features::empty(),
-                limits: if cfg!(target_arch = "wasm") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
-                label: None,
-            },
-            None,
-        ).await.unwrap();
-
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps.formats.iter()
-            .copied()
-            .find(|f| f.is_srgb())
-            .unwrap_or(surface_caps.formats[0]);
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-        };
-        surface.configure(&device, &config);
-
+    async fn new(gpu: GpuState) -> Self {
         let diffuse_bytes = include_bytes!("happy-tree.png");
         let diffuse_image = image::load_from_memory(diffuse_bytes).unwrap();
         let diffuse_rgba = diffuse_image.to_rgba8();
@@ -242,7 +194,7 @@ impl State {
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
-        let diffuse_texture = device.create_texture(
+        let diffuse_texture = gpu.device.create_texture(
             &wgpu::TextureDescriptor {
                 size: texture_size,
                 mip_level_count: 1,
@@ -255,7 +207,7 @@ impl State {
             }
         );
 
-        queue.write_texture(
+        gpu.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &diffuse_texture,
                 mip_level: 0,
@@ -272,7 +224,7 @@ impl State {
         );
 
         let diffuse_texture_view = diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let diffuse_sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -283,7 +235,7 @@ impl State {
         });
 
         let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -305,7 +257,7 @@ impl State {
                 label: Some("texture_bind_group_layout"),
             });
 
-        let diffuse_bind_group = device.create_bind_group(
+        let diffuse_bind_group = gpu.device.create_bind_group(
             &wgpu::BindGroupDescriptor {
                 layout: &texture_bind_group_layout,
                 entries: &[
@@ -326,7 +278,7 @@ impl State {
             eye: Point3::new(0.0, 1.0, 2.0),
             target: Point3::new(0.0, 0.0, 0.0),
             up: Vector3::new(0.0, 1.0, 0.0),
-            aspect: config.width as f32 / config.height as f32,
+            aspect: gpu.config.width as f32 / gpu.config.height as f32,
             fovy: 45.0,
             znear: 0.1,
             zfar: 100.0,
@@ -335,7 +287,7 @@ impl State {
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);
 
-        let camera_buffer = device.create_buffer_init(
+        let camera_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Camera Buffer"),
                 contents: bytemuck::cast_slice(&[camera_uniform]),
@@ -343,7 +295,7 @@ impl State {
             }
         );
 
-        let camera_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let camera_bind_group_layout = gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -358,7 +310,7 @@ impl State {
             ],
             label: Some("camera_bind_group_layout"),
         });
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let camera_bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &camera_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -371,9 +323,9 @@ impl State {
 
         let camera_controller = CameraController::new(0.2);
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let shader = gpu.device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     &texture_bind_group_layout,
@@ -381,7 +333,7 @@ impl State {
                 ],
                 push_constant_ranges: &[],
             });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let render_pipeline = gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
@@ -395,7 +347,7 @@ impl State {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: gpu.config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -418,7 +370,7 @@ impl State {
             multiview: None,
         });
 
-        let vertex_buffer = device.create_buffer_init(
+        let vertex_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(VERTICES),
@@ -426,7 +378,7 @@ impl State {
             }
         );
 
-        let index_buffer = device.create_buffer_init(
+        let index_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
                 contents: bytemuck::cast_slice(INDICES),
@@ -437,12 +389,7 @@ impl State {
         let num_indices = INDICES.len() as u32;
 
         Self {
-            window,
-            surface,
-            device,
-            queue,
-            config,
-            size,
+            gpu,
             render_pipeline,
             vertex_buffer,
             index_buffer,
@@ -456,19 +403,6 @@ impl State {
         }
     }
 
-    pub fn window(&self) -> &Window {
-        &self.window
-    }
-
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
-        }
-    }
-
     fn input(&mut self, event: &WindowEvent) -> bool {
         self.camera_controller.process_events(event)
     }
@@ -476,13 +410,13 @@ impl State {
     fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
         self.camera_uniform.update_view_proj(&self.camera);
-        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        self.gpu.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
+        let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Render Encoder"),
         });
 
@@ -515,27 +449,28 @@ impl State {
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        self.gpu.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
         Ok(())
     }
 }
 
-pub async fn run() {
+fn main() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new().with_resizable(false).build(&event_loop).unwrap();
 
-    let mut state = State::new(window).await;
+    let gpu = futures::executor::block_on(GpuState::new(window));
+    let mut state = futures::executor::block_on(State::new(gpu));
 
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == state.window().id() => if !state.input(event) {
+            } if window_id == state.gpu.window.id() => if !state.input(event) {
                 match event {
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
@@ -547,32 +482,21 @@ pub async fn run() {
                             },
                         ..
                     } => *control_flow = ControlFlow::Exit,
-                    WindowEvent::Resized(physical_size) => {
-                        state.resize(*physical_size);
-                    }
-                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                        state.resize(**new_inner_size);
-                    }
                     _ => {}
                 }
             }
-            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
+            Event::RedrawRequested(window_id) if window_id == state.gpu.window.id() => {
                 state.update();
                 match state.render() {
                     Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     Err(e) => eprintln!("{:?}", e),
                 }
             }
             Event::MainEventsCleared => {
-                state.window().request_redraw();
+                state.gpu.window.request_redraw();
             }
             _ => (),
         }
     });
-}
-
-fn main() {
-    futures::executor::block_on(run());
 }
