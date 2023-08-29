@@ -1,6 +1,8 @@
 mod gpu_state;
 mod texture;
+mod mesh;
 use gpu_state::GpuState;
+use mesh::{MeshVertex, Mesh};
 
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
@@ -11,38 +13,35 @@ use wgpu::util::DeviceExt;
 use image::GenericImageView;
 use nalgebra::{Vector3, Point3, Rotation3, Matrix4, base::Unit};
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
+pub trait Vertex {
+    fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
 
-const VERTICES: &[Vertex] = &[
-    Vertex { position: [-1.0, 1.0, 1.0], tex_coords: [0.0, 0.0], }, // front face
-    Vertex { position: [-1.0, 1.0, 1.0], tex_coords: [0.0, 1.0], }, // top face
-    Vertex { position: [-1.0, 1.0, 1.0], tex_coords: [1.0, 0.0], }, // left face
-    Vertex { position: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0], }, // front face
-    Vertex { position: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0], }, // top face
-    Vertex { position: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0], }, // right face
-    Vertex { position: [-1.0, -1.0, 1.0], tex_coords: [0.0, 1.0], }, // front face
-    Vertex { position: [-1.0, -1.0, 1.0], tex_coords: [0.0, 0.0], }, // bottom face
-    Vertex { position: [-1.0, -1.0, 1.0], tex_coords: [1.0, 1.0], }, // left face
-    Vertex { position: [1.0, -1.0, 1.0], tex_coords: [1.0, 1.0], }, // front face
-    Vertex { position: [1.0, -1.0, 1.0], tex_coords: [1.0, 0.0], }, // bottom face
-    Vertex { position: [1.0, -1.0, 1.0], tex_coords: [0.0, 1.0], }, // right face
-    Vertex { position: [-1.0, 1.0, -1.0], tex_coords: [0.0, 1.0], }, // back face
-    Vertex { position: [-1.0, 1.0, -1.0], tex_coords: [0.0, 0.0], }, // top face
-    Vertex { position: [-1.0, 1.0, -1.0], tex_coords: [0.0, 0.0], }, // left face
-    Vertex { position: [1.0, 1.0, -1.0], tex_coords: [1.0, 1.0], }, // back face
-    Vertex { position: [1.0, 1.0, -1.0], tex_coords: [1.0, 0.0], }, // top face
-    Vertex { position: [1.0, 1.0, -1.0], tex_coords: [1.0, 0.0], }, // right face
-    Vertex { position: [-1.0, -1.0, -1.0], tex_coords: [0.0, 0.0], }, // back face
-    Vertex { position: [-1.0, -1.0, -1.0], tex_coords: [0.0, 1.0], }, // bottom face
-    Vertex { position: [-1.0, -1.0, -1.0], tex_coords: [0.0, 1.0], }, // left face
-    Vertex { position: [1.0, -1.0, -1.0], tex_coords: [1.0, 0.0], }, // back face
-    Vertex { position: [1.0, -1.0, -1.0], tex_coords: [1.0, 1.0], }, // bottom face
-    Vertex { position: [1.0, -1.0, -1.0], tex_coords: [1.0, 1.0], }, // right face
+const VERTICES: &[MeshVertex] = &[
+    MeshVertex { position: [-1.0, 1.0, 1.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], }, // front face
+    MeshVertex { position: [-1.0, 1.0, 1.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], }, // top face
+    MeshVertex { position: [-1.0, 1.0, 1.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], }, // left face
+    MeshVertex { position: [1.0, 1.0, 1.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], }, // front face
+    MeshVertex { position: [1.0, 1.0, 1.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], }, // top face
+    MeshVertex { position: [1.0, 1.0, 1.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], }, // right face
+    MeshVertex { position: [-1.0, -1.0, 1.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], }, // front face
+    MeshVertex { position: [-1.0, -1.0, 1.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], }, // bottom face
+    MeshVertex { position: [-1.0, -1.0, 1.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], }, // left face
+    MeshVertex { position: [1.0, -1.0, 1.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], }, // front face
+    MeshVertex { position: [1.0, -1.0, 1.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], }, // bottom face
+    MeshVertex { position: [1.0, -1.0, 1.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], }, // right face
+    MeshVertex { position: [-1.0, 1.0, -1.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], }, // back face
+    MeshVertex { position: [-1.0, 1.0, -1.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], }, // top face
+    MeshVertex { position: [-1.0, 1.0, -1.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], }, // left face
+    MeshVertex { position: [1.0, 1.0, -1.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], }, // back face
+    MeshVertex { position: [1.0, 1.0, -1.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], }, // top face
+    MeshVertex { position: [1.0, 1.0, -1.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], }, // right face
+    MeshVertex { position: [-1.0, -1.0, -1.0], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], }, // back face
+    MeshVertex { position: [-1.0, -1.0, -1.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], }, // bottom face
+    MeshVertex { position: [-1.0, -1.0, -1.0], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], }, // left face
+    MeshVertex { position: [1.0, -1.0, -1.0], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], }, // back face
+    MeshVertex { position: [1.0, -1.0, -1.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], }, // bottom face
+    MeshVertex { position: [1.0, -1.0, -1.0], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], }, // right face
 ];
 
 const INDICES: &[u16] = &[
@@ -60,6 +59,7 @@ const INDICES: &[u16] = &[
     2, 20, 8, // left 2
 ];
 
+/*
 impl Vertex {
     const ATTRIBS: [wgpu::VertexAttribute; 2] =
         wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
@@ -72,6 +72,7 @@ impl Vertex {
         }
     }
 }
+*/
 
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
@@ -200,9 +201,7 @@ impl CameraController {
 struct State {
     gpu: GpuState,
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_indices: u32,
+    test_mesh: Mesh,
     diffuse_bind_group: wgpu::BindGroup,
     camera: Camera,
     camera_controller: CameraController,
@@ -322,7 +321,7 @@ impl State {
                 module: &shader,
                 entry_point: "vs_main",
                 buffers: &[
-                    Vertex::desc(),
+                    mesh::MeshVertex::desc(),
                 ],
             },
             fragment: Some(wgpu::FragmentState {
@@ -352,30 +351,12 @@ impl State {
             multiview: None,
         });
 
-        let vertex_buffer = gpu.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
-        );
-
-        let index_buffer = gpu.device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
-
-        let num_indices = INDICES.len() as u32;
+        let test_mesh = Mesh::new(&gpu, &VERTICES, &INDICES);
 
         Self {
             gpu,
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            num_indices,
+            test_mesh,
             diffuse_bind_group,
             camera,
             camera_controller,
@@ -425,10 +406,10 @@ impl State {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_vertex_buffer(0, self.test_mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.test_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.test_mesh.num_elements, 0, 0..1);
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
