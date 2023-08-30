@@ -1,13 +1,15 @@
 mod gpu_state;
 mod texture;
 mod mesh;
+mod camera;
 use gpu_state::GpuState;
 use mesh::{MeshVertex, Mesh};
 
 use winit::{
-    event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
+    event::{DeviceEvent, Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput, MouseButton},
     event_loop::{ControlFlow, EventLoop},
     window::{WindowBuilder},
+    dpi::PhysicalPosition,
 };
 use wgpu::util::DeviceExt;
 use nalgebra::{Vector3, Point3, Matrix4, base::Unit};
@@ -58,6 +60,7 @@ const INDICES: &[u16] = &[
     2, 20, 8, // left 2
 ];
 
+/*
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
@@ -83,6 +86,7 @@ impl Camera {
         OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }
+*/
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -97,11 +101,13 @@ impl CameraUniform {
         }
     }
 
-    fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = camera.build_view_projection_matrix().into();
+    fn update_view_proj(&mut self, camera: &camera::Camera, projection: &camera::Projection) {
+        //self.view_position = camera.position.to_homogenous().into();
+        self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
     }
 }
 
+/*
 struct CameraController {
     speed: f32,
     is_forward_pressed: bool,
@@ -182,16 +188,19 @@ impl CameraController {
     }
 }
 
+*/
 struct State {
     gpu: GpuState,
     render_pipeline: wgpu::RenderPipeline,
     test_mesh: Mesh,
     diffuse_bind_group: wgpu::BindGroup,
-    camera: Camera,
-    camera_controller: CameraController,
+    camera: camera::Camera,
+    projection: camera::Projection,
+    camera_controller: camera::CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+    mouse_pressed: bool,
 }
 
 impl State {
@@ -239,18 +248,12 @@ impl State {
             }
         );
 
-        let camera = Camera {
-            eye: Point3::new(0.0, 1.0, 2.0),
-            target: Point3::new(0.0, 0.0, 0.0),
-            up: Vector3::new(0.0, 1.0, 0.0),
-            aspect: gpu.config.width as f32 / gpu.config.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
-        };
+        let camera = camera::Camera::new(Point3::new(0.0, 1.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0));
+        let projection = camera::Projection::new(gpu.config.width, gpu.config.height, f32::to_radians(45.0), 0.1, 100.0);
+        let camera_controller = camera::CameraController::new(4.0, 60.0);
 
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        camera_uniform.update_view_proj(&camera, &projection);
 
         let camera_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -285,8 +288,6 @@ impl State {
             ],
             label: Some("camera_bind_group"),
         });
-
-        let camera_controller = CameraController::new(0.2);
 
         let shader = gpu.device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
         let render_pipeline_layout =
@@ -343,20 +344,46 @@ impl State {
             test_mesh,
             diffuse_bind_group,
             camera,
+            projection,
             camera_controller,
             camera_uniform,
             camera_buffer,
             camera_bind_group,
+            mouse_pressed: false,
         }
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_events(event)
+        match event {
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => self.camera_controller.process_keyboard(*key, *state),
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.camera_controller.process_scroll(delta);
+                true
+            }
+            WindowEvent::MouseInput {
+                button: MouseButton::Left,
+                state,
+                ..
+            } => {
+                self.mouse_pressed = *state == ElementState::Pressed;
+                println!("{:?}", self.mouse_pressed);
+                true
+            }
+            _ => false,
+        }
     }
 
-    fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
+    fn update(&mut self, dt: std::time::Duration) {
+        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
         self.gpu.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
@@ -412,13 +439,26 @@ fn main() {
     let gpu = futures::executor::block_on(GpuState::new(window));
     let mut state = futures::executor::block_on(State::new(gpu));
 
+    let mut last_render_time = std::time::Instant::now();
+    let mut mouse_position = PhysicalPosition::new(-1.0, -1.0);
+
     event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Poll;
         match event {
+            /*
+            Event::DeviceEvent {
+                event: DeviceEvent::MouseMotion{ delta, },
+                ..
+            } => if state.mouse_pressed {
+                state.camera_controller.process_mouse(delta.0, delta.1)
+            }
+            */
             Event::WindowEvent {
                 ref event,
                 window_id,
             } if window_id == state.gpu.window.id() => if !state.input(event) {
                 match event {
+                    //WindowEvent::CursorMoved { device_id, position, ..} => { println!("{:?}", position) },
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
                         input:
@@ -429,11 +469,27 @@ fn main() {
                             },
                         ..
                     } => *control_flow = ControlFlow::Exit,
+                    WindowEvent::CursorMoved {
+                        position,
+                        ..
+                    } => {
+                        if mouse_position.x >= 0.0 && mouse_position.y >= 0.0 {
+                            state.camera_controller.process_mouse(
+                                position.x - mouse_position.x,
+                                position.y - mouse_position.y,
+                            );
+                        }
+
+                        mouse_position = *position;
+                    }
                     _ => {}
                 }
             }
             Event::RedrawRequested(window_id) if window_id == state.gpu.window.id() => {
-                state.update();
+                let now = std::time::Instant::now();
+                let dt = now - last_render_time;
+                last_render_time = now;
+                state.update(dt);
                 match state.render() {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
