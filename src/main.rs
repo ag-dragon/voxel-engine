@@ -445,20 +445,11 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
-            /*
-            Event::DeviceEvent {
-                event: DeviceEvent::MouseMotion{ delta, },
-                ..
-            } => if state.mouse_pressed {
-                state.camera_controller.process_mouse(delta.0, delta.1)
-            }
-            */
             Event::WindowEvent {
                 ref event,
                 window_id,
             } if window_id == state.gpu.window.id() => if !state.input(event) {
                 match event {
-                    //WindowEvent::CursorMoved { device_id, position, ..} => { println!("{:?}", position) },
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
                         input:
@@ -473,7 +464,9 @@ fn main() {
                         position,
                         ..
                     } => {
-                        if mouse_position.x >= 0.0 && mouse_position.y >= 0.0 {
+                        if mouse_position.x >= 0.0 && mouse_position.y >= 0.0
+                            && !((position.x - mouse_position.x).abs() > 20.0
+                            || (position.y - mouse_position.y).abs() > 20.0) {
                             state.camera_controller.process_mouse(
                                 position.x - mouse_position.x,
                                 position.y - mouse_position.y,
