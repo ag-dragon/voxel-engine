@@ -2,8 +2,10 @@ mod gpu_state;
 mod texture;
 mod mesh;
 mod camera;
+mod chunk;
 use gpu_state::GpuState;
 use mesh::{MeshVertex, Mesh};
+use chunk::Chunk;
 
 use winit::{
     event::{DeviceEvent, Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput, MouseButton},
@@ -421,27 +423,8 @@ impl State {
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // chunk mesh generation (temp putting it here for testing)
-        let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
-        let mut chunk_indices: Vec<u16> = Vec::new();
-
-        chunk_vertices.extend_from_slice(FRONT_FACE);
-        chunk_indices.extend_from_slice(&[0,2,1, 2,3,1]);
-        chunk_vertices.extend_from_slice(TOP_FACE);
-        chunk_indices.extend_from_slice(&[4,6,5, 6,7,5]);
-        chunk_vertices.extend(
-            FRONT_FACE.into_iter().map(|v| MeshVertex {
-                position: [
-                    v.position[0] + 1.0,
-                    v.position[1] + 0.0,
-                    v.position[2] + 0.0,
-                ],
-                tex_coords: v.tex_coords,
-                normal: v.normal,
-            })
-        );
-        chunk_indices.extend_from_slice(&[8,10,9, 10,11,9]);
-        
-        let chunk = Mesh::new(&self.gpu, &chunk_vertices, &chunk_indices);
+        let chunk = Chunk::new();
+        let chunk_mesh = chunk.gen_mesh(&self.gpu);
 
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -472,10 +455,10 @@ impl State {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, chunk.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(chunk.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_vertex_buffer(0, chunk_mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(chunk_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            render_pass.draw_indexed(0..chunk.num_elements, 0, 0..1);
+            render_pass.draw_indexed(0..chunk_mesh.num_elements, 0, 0..1);
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
