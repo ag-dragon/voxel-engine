@@ -232,7 +232,6 @@ struct State {
     gpu: GpuState,
     render_pipeline: wgpu::RenderPipeline,
     depth_texture: texture::Texture,
-    test_mesh: Mesh,
     diffuse_bind_group: wgpu::BindGroup,
     camera: camera::Camera,
     projection: camera::Projection,
@@ -384,13 +383,10 @@ impl State {
             multiview: None,
         });
 
-        let test_mesh = Mesh::new(&gpu, &VERTICES, &INDICES);
-
         Self {
             gpu,
             render_pipeline,
             depth_texture,
-            test_mesh,
             diffuse_bind_group,
             camera,
             projection,
@@ -473,7 +469,7 @@ impl State {
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
             render_pass.set_vertex_buffer(0, chunk_mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(chunk_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_index_buffer(chunk_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
             render_pass.draw_indexed(0..chunk_mesh.num_elements, 0, 0..1);
         }

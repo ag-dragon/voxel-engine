@@ -32,7 +32,7 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(gpu: &GpuState, vertices: &[MeshVertex], indices: &[u16]) -> Self {
+    pub fn new(gpu: &GpuState, vertices: &[MeshVertex], indices: &[u32]) -> Self {
         let vertex_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Vertex Buffer"),
             contents: bytemuck::cast_slice(&vertices),
