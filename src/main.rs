@@ -364,10 +364,6 @@ impl State {
                     },
                 ..
             } => self.camera_controller.process_keyboard(*key, *state),
-            WindowEvent::MouseWheel { delta, .. } => {
-                self.camera_controller.process_scroll(delta);
-                true
-            }
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 state,
