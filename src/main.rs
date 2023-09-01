@@ -52,16 +52,16 @@ const FRONT_FACE: &[MeshVertex] = &[
     MeshVertex { position: [0.5, -0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const BACK_FACE: &[MeshVertex] = &[
-    MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [0.5, 0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [0.5, 0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const TOP_FACE: &[MeshVertex] = &[
-    MeshVertex { position: [-0.5, 0.5, 0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [0.5, 0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [0.5, 0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [-0.5, 0.5, 0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [0.5, 0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const BOTTOM_FACE: &[MeshVertex] = &[
     MeshVertex { position: [-0.5, -0.5, 0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
@@ -70,15 +70,15 @@ const BOTTOM_FACE: &[MeshVertex] = &[
     MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const LEFT_FACE: &[MeshVertex] = &[
-    MeshVertex { position: [-0.5, 0.5, 0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [-0.5, -0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [-0.5, 0.5, 0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [-0.5, -0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const RIGHT_FACE: &[MeshVertex] = &[
     MeshVertex { position: [0.5, 0.5, 0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [0.5, -0.5, 0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [0.5, 0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [0.5, -0.5, 0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
     MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 
@@ -407,7 +407,6 @@ impl State {
                 ..
             } => {
                 self.mouse_pressed = *state == ElementState::Pressed;
-                println!("{:?}", self.mouse_pressed);
                 true
             }
             _ => false,
@@ -427,6 +426,20 @@ impl State {
 
         chunk_vertices.extend_from_slice(FRONT_FACE);
         chunk_indices.extend_from_slice(&[0,2,1, 2,3,1]);
+        chunk_vertices.extend_from_slice(TOP_FACE);
+        chunk_indices.extend_from_slice(&[4,6,5, 6,7,5]);
+        chunk_vertices.extend(
+            FRONT_FACE.into_iter().map(|v| MeshVertex {
+                position: [
+                    v.position[0] + 1.0,
+                    v.position[1] + 0.0,
+                    v.position[2] + 0.0,
+                ],
+                tex_coords: v.tex_coords,
+                normal: v.normal,
+            })
+        );
+        chunk_indices.extend_from_slice(&[8,10,9, 10,11,9]);
         
         let chunk = Mesh::new(&self.gpu, &chunk_vertices, &chunk_indices);
 
