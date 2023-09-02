@@ -108,8 +108,26 @@ impl Chunk {
         }
     }
 
+    pub fn get_block(&self, x: usize, y: usize, z: usize) -> BlockType {
+        self.blocks[x + CHUNK_SIZE*y + CHUNK_SIZE*CHUNK_SIZE*z]
+    }
+
+    pub fn get_neighbor(&self, block: usize, face: &BlockFace) -> BlockType {
+        let x = block % CHUNK_SIZE;
+        let y = (block / CHUNK_SIZE) % CHUNK_SIZE;
+        let z = block / (CHUNK_SIZE*CHUNK_SIZE);
+
+        match face {
+            BlockFace::Front => if z < CHUNK_SIZE-1 { self.get_block(x, y, z+1) } else { BlockType::Air },
+            BlockFace::Back => if z > 0 { self.get_block(x, y, z-1) } else { BlockType::Air },
+            BlockFace::Top => if y < CHUNK_SIZE-1 { self.get_block(x, y+1, z) } else { BlockType::Air },
+            BlockFace::Bottom => if y > 0 { self.get_block(x, y-1, z) } else { BlockType::Air },
+            BlockFace::Left => if x > 0 { self.get_block(x-1, y, z) } else { BlockType::Air },
+            BlockFace::Right => if x < CHUNK_SIZE-1 { self.get_block(x+1, y, z) } else { BlockType::Air },
+        }
+    }
+
     pub fn gen_mesh(&self, gpu: &GpuState) -> Mesh {
-        // chunk mesh generation (temp putting it here for testing)
         let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
         let mut chunk_indices: Vec<u32> = Vec::new();
         let mut o: u32 = 0;
@@ -119,19 +137,24 @@ impl Chunk {
                 BlockType::Air => {},
                 _ => {
                     for face in BlockFace::iterator() {
-                        chunk_vertices.extend(
-                            face.get_vertices().into_iter().map(|v| MeshVertex {
-                                position: [
-                                    v.position[0] + (i % CHUNK_SIZE) as f32,
-                                    v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
-                                    v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
-                                ],
-                                tex_coords: v.tex_coords,
-                                normal: v.normal,
-                            })
-                        );
-                        chunk_indices.extend_from_slice(&[o+0,o+2,o+1, o+2,o+3,o+1]);
-                        o += 4;
+                        match self.get_neighbor(i, face) {
+                            BlockType::Air => {
+                                chunk_vertices.extend(
+                                face.get_vertices().into_iter().map(|v| MeshVertex {
+                                    position: [
+                                        v.position[0] + (i % CHUNK_SIZE) as f32,
+                                        v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
+                                        v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
+                                    ],
+                                    tex_coords: v.tex_coords,
+                                    normal: v.normal,
+                                })
+                                );
+                                chunk_indices.extend_from_slice(&[o+0,o+2,o+1, o+2,o+3,o+1]);
+                                o += 4;
+                            },
+                            _ => {}
+                        };
                     }
                 }
             }
