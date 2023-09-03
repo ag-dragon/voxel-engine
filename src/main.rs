@@ -97,7 +97,7 @@ impl State {
             }
         );
 
-        let camera = camera::Camera::new(Point3::new(0.0, 1.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0));
+        let camera = camera::Camera::new(Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0));
         let projection = camera::Projection::new(gpu.config.width, gpu.config.height, f32::to_radians(45.0), 0.1, 100.0);
         let camera_controller = camera::CameraController::new(4.0, 60.0);
 

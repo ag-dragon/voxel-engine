@@ -17,6 +17,7 @@ impl BlockType {
                 BlockFace::Bottom => 2,
                 _ => 1,
             },
+            BlockType::Dirt => 2,
             _ => 255, // Missing Texture
         }
     }
