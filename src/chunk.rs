@@ -1,5 +1,6 @@
 use crate::gpu_state::GpuState;
 use crate::mesh::{Mesh, MeshVertex};
+use nalgebra::{point, Point3};
 use std::slice::Iter;
 
 #[derive(Debug, Clone, Copy)]
@@ -98,11 +99,12 @@ impl BlockFace {
 const CHUNK_SIZE: usize = 16;
 
 pub struct Chunk {
+    position: Point3<i32>,
     blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE],
 }
 
 impl Chunk {
-    pub fn new() -> Self {
+    pub fn new(position: Point3<i32>) -> Self {
         let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
             = [BlockType::Dirt; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
         for i in 0..blocks.len() {
@@ -111,7 +113,8 @@ impl Chunk {
             }
         }
         Self {
-            blocks
+            position,
+            blocks,
         }
     }
 
@@ -149,9 +152,12 @@ impl Chunk {
                                 chunk_vertices.extend(
                                     face.get_vertices().into_iter().map(|v| MeshVertex {
                                         position: [
-                                            v.position[0] + (i % CHUNK_SIZE) as f32,
-                                            v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
-                                            v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
+                                            (self.position[0] * CHUNK_SIZE as i32) as f32
+                                                + v.position[0] + (i % CHUNK_SIZE) as f32,
+                                            (self.position[1] * CHUNK_SIZE as i32) as f32
+                                                + v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
+                                            (self.position[2] * CHUNK_SIZE as i32) as f32
+                                                + v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
                                         ],
                                         tex_coords: [
                                             (block.texture(face) % 16) as f32 * 0.0625

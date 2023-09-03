@@ -14,7 +14,7 @@ use winit::{
     dpi::PhysicalPosition,
 };
 use wgpu::util::DeviceExt;
-use nalgebra::{Vector3, Point3, Matrix4, base::Unit};
+use nalgebra::{Vector3, Point3, point, Matrix4, base::Unit};
 
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -239,8 +239,12 @@ impl State {
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // chunk mesh generation (temp putting it here for testing)
-        let chunk = Chunk::new();
+        let chunk = Chunk::new(point![-1, 0, 0]);
+        let chunk2 = Chunk::new(point![0, 0, 0]);
+        let chunk3 = Chunk::new(point![0, 0, -1]);
         let chunk_mesh = chunk.gen_mesh(&self.gpu);
+        let chunk_mesh2 = chunk2.gen_mesh(&self.gpu);
+        let chunk_mesh3 = chunk3.gen_mesh(&self.gpu);
 
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -280,8 +284,13 @@ impl State {
 
             render_pass.set_vertex_buffer(0, chunk_mesh.vertex_buffer.slice(..));
             render_pass.set_index_buffer(chunk_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
             render_pass.draw_indexed(0..chunk_mesh.num_elements, 0, 0..1);
+            render_pass.set_vertex_buffer(0, chunk_mesh2.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(chunk_mesh2.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..chunk_mesh2.num_elements, 0, 0..1);
+            render_pass.set_vertex_buffer(0, chunk_mesh3.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(chunk_mesh3.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..chunk_mesh3.num_elements, 0, 0..1);
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
