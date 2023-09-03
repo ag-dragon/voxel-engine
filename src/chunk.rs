@@ -6,17 +6,18 @@ use std::slice::Iter;
 pub enum BlockType {
     Air,
     Grass,
+    Dirt,
 }
 
 impl BlockType {
-    pub fn texture(&self, face: &BlockFace) -> Option<u32> {
+    pub fn texture(&self, face: &BlockFace) -> u32 {
         match *self {
             BlockType::Grass => match face {
-                BlockFace::Top => Some(0),
-                BlockFace::Bottom => Some(2),
-                _ => Some(1),
+                BlockFace::Top => 0,
+                BlockFace::Bottom => 2,
+                _ => 1,
             },
-            _ => None,
+            _ => 255, // Missing Texture
         }
     }
 }
@@ -101,8 +102,13 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new() -> Self {
-        let blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
-            = [BlockType::Grass; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
+        let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
+            = [BlockType::Dirt; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
+        for i in 0..blocks.len() {
+            if (i / CHUNK_SIZE) % CHUNK_SIZE == CHUNK_SIZE-1 {
+                blocks[i] = BlockType::Grass;
+            }
+        }
         Self {
             blocks
         }
@@ -140,22 +146,20 @@ impl Chunk {
                         match self.get_neighbor(i, face) {
                             BlockType::Air => {
                                 chunk_vertices.extend(
-                                face.get_vertices().into_iter().map(|v| MeshVertex {
-                                    position: [
-                                        v.position[0] + (i % CHUNK_SIZE) as f32,
-                                        v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
-                                        v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
-                                    ],
-                                    tex_coords: [
-                                        if let Some(id) = block.texture(face) {
-                                            (id % 16) as f32 * 0.0625
-                                        } else {0.0} + (v.tex_coords[0] * 0.0625),
-                                        if let Some(id) = block.texture(face) {
-                                            (id / 16) as f32 * 0.0625
-                                        } else {0.0} + (v.tex_coords[1] * 0.0625),
-                                    ],
-                                    normal: v.normal,
-                                })
+                                    face.get_vertices().into_iter().map(|v| MeshVertex {
+                                        position: [
+                                            v.position[0] + (i % CHUNK_SIZE) as f32,
+                                            v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
+                                            v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
+                                        ],
+                                        tex_coords: [
+                                            (block.texture(face) % 16) as f32 * 0.0625
+                                             + (v.tex_coords[0] * 0.0625),
+                                            (block.texture(face) / 16) as f32 * 0.0625
+                                             + (v.tex_coords[1] * 0.0625),
+                                        ],
+                                        normal: v.normal,
+                                    })
                                 );
                                 chunk_indices.extend_from_slice(&[o+0,o+2,o+1, o+2,o+3,o+1]);
                                 o += 4;
