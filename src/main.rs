@@ -237,15 +237,8 @@ impl State {
         self.gpu.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self, meshes: &[Mesh]) -> Result<(), wgpu::SurfaceError> {
         // chunk mesh generation (temp putting it here for testing)
-        let chunk = Chunk::new(point![-1, 0, 0]);
-        let chunk2 = Chunk::new(point![0, 0, 0]);
-        let chunk3 = Chunk::new(point![0, 0, -1]);
-        let chunk_mesh = chunk.gen_mesh(&self.gpu);
-        let chunk_mesh2 = chunk2.gen_mesh(&self.gpu);
-        let chunk_mesh3 = chunk3.gen_mesh(&self.gpu);
-
         let output = self.gpu.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self.gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -282,15 +275,11 @@ impl State {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
 
-            render_pass.set_vertex_buffer(0, chunk_mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(chunk_mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..chunk_mesh.num_elements, 0, 0..1);
-            render_pass.set_vertex_buffer(0, chunk_mesh2.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(chunk_mesh2.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..chunk_mesh2.num_elements, 0, 0..1);
-            render_pass.set_vertex_buffer(0, chunk_mesh3.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(chunk_mesh3.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.draw_indexed(0..chunk_mesh3.num_elements, 0, 0..1);
+            for mesh in meshes {
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
+            }
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
@@ -308,6 +297,17 @@ fn main() {
 
     let gpu = futures::executor::block_on(GpuState::new(window));
     let mut state = futures::executor::block_on(State::new(gpu));
+
+    let mut chunks = Vec::new();
+    chunks.push(Chunk::new(point![-1, 0, 0]));
+    chunks.push(Chunk::new(point![0, 0, 0]));
+    chunks.push(Chunk::new(point![-1, 0, -1]));
+    chunks.push(Chunk::new(point![0, 0, -1]));
+    chunks.push(Chunk::new(point![1, 0, -1]));
+    let mut chunk_meshes = Vec::new();
+    for chunk in chunks {
+        chunk_meshes.push(chunk.gen_mesh(&state.gpu));
+    }
 
     let mut last_render_time = std::time::Instant::now();
     let mut mouse_position = PhysicalPosition::new(-1.0, -1.0);
@@ -353,7 +353,7 @@ fn main() {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
-                match state.render() {
+                match state.render(&chunk_meshes[..]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     Err(e) => eprintln!("{:?}", e),
