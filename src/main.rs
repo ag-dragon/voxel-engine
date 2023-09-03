@@ -244,8 +244,8 @@ struct State {
 
 impl State {
     async fn new(gpu: GpuState) -> Self {
-        let diffuse_bytes = include_bytes!("happy-tree.png");
-        let diffuse_texture = texture::Texture::from_bytes(&gpu, diffuse_bytes, "happy-tree.png").unwrap();
+        let diffuse_bytes = include_bytes!("block-atlas.png");
+        let diffuse_texture = texture::Texture::from_bytes(&gpu, diffuse_bytes, "block-atlas.png").unwrap();
 
         let texture_bind_group_layout =
             gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

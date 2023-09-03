@@ -38,10 +38,10 @@ const FRONT_FACE: &[MeshVertex] = &[
     MeshVertex { position: [0.5, -0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const BACK_FACE: &[MeshVertex] = &[
-    MeshVertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
-    MeshVertex { position: [0.5, 0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [0.5, 0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], },
+    MeshVertex { position: [-0.5, -0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], },
 ];
 const TOP_FACE: &[MeshVertex] = &[
     MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], },
@@ -146,7 +146,14 @@ impl Chunk {
                                         v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
                                         v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
                                     ],
-                                    tex_coords: v.tex_coords,
+                                    tex_coords: [
+                                        if let Some(id) = block.texture(face) {
+                                            (id % 16) as f32 * 0.0625
+                                        } else {0.0} + (v.tex_coords[0] * 0.0625),
+                                        if let Some(id) = block.texture(face) {
+                                            (id / 16) as f32 * 0.0625
+                                        } else {0.0} + (v.tex_coords[1] * 0.0625),
+                                    ],
                                     normal: v.normal,
                                 })
                                 );
