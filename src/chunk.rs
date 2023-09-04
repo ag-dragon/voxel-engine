@@ -96,11 +96,11 @@ impl BlockFace {
     }
 }
 
-const CHUNK_SIZE: usize = 16;
+pub const CHUNK_SIZE: usize = 16;
 
 pub struct Chunk {
-    position: Point3<i32>,
-    blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE],
+    pub position: Point3<i32>,
+    pub blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE],
 }
 
 impl Chunk {

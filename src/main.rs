@@ -289,6 +289,8 @@ impl State {
     }
 }
 
+const RENDER_DISTANCE: i32 = 4;
+
 fn main() {
     env_logger::init();
 
@@ -299,13 +301,13 @@ fn main() {
     let mut state = futures::executor::block_on(State::new(gpu));
 
     let mut chunks = Vec::new();
-    chunks.push(Chunk::new(point![-1, 0, 0]));
-    chunks.push(Chunk::new(point![0, 0, 0]));
-    chunks.push(Chunk::new(point![-1, 0, -1]));
-    chunks.push(Chunk::new(point![0, 0, -1]));
-    chunks.push(Chunk::new(point![1, 0, -1]));
+    for x in -RENDER_DISTANCE..RENDER_DISTANCE {
+        for z in -RENDER_DISTANCE..RENDER_DISTANCE {
+            chunks.push(Chunk::new(point![x, 0, z]));
+        }
+    }
     let mut chunk_meshes = Vec::new();
-    for chunk in chunks {
+    for chunk in &chunks {
         chunk_meshes.push(chunk.gen_mesh(&state.gpu));
     }
 
@@ -353,6 +355,42 @@ fn main() {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 state.update(dt);
+
+                let c_pos = point![
+                    f32::floor(state.camera.position[0] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(state.camera.position[1] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(state.camera.position[2] / chunk::CHUNK_SIZE as f32) as i32,
+                ];
+                for i in 0..chunks.len() {
+                    if (c_pos[0] - chunks[i].position[0]).abs() > RENDER_DISTANCE {
+                        let chunk = Chunk::new(point![
+                            chunks[i].position[0] + (c_pos[0] - chunks[i].position[0]).signum()*RENDER_DISTANCE*2,
+                            chunks[i].position[1],
+                            chunks[i].position[2]
+                        ]);
+                        chunk_meshes.push(chunk.gen_mesh(&state.gpu));
+                        chunks.push(chunk);
+                        chunks.remove(i);
+                        chunk_meshes.remove(i);
+                    } else if (c_pos[2] - chunks[i].position[2]).abs() > RENDER_DISTANCE {
+                        let chunk = Chunk::new(point![
+                            chunks[i].position[0],
+                            chunks[i].position[1],
+                            chunks[i].position[2] + (c_pos[2] - chunks[i].position[2]).signum()*RENDER_DISTANCE*2
+                        ]);
+                        chunk_meshes.push(chunk.gen_mesh(&state.gpu));
+                        chunks.push(chunk);
+                        chunks.remove(i);
+                        chunk_meshes.remove(i);
+                    }
+                    /*
+                    if (chunk.position - c_pos).norm().abs()
+                        > RENDER_DISTANCE {
+                        println!("too far");
+                    }
+                    */
+                }
+
                 match state.render(&chunk_meshes[..]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
