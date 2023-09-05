@@ -20,24 +20,6 @@ pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct CameraUniform {
-    view_proj: [[f32; 4]; 4],
-}
-
-impl CameraUniform {
-    fn new() -> Self {
-        Self {
-            view_proj: Matrix4::identity().into(),
-        }
-    }
-
-    fn update_view_proj(&mut self, camera: &camera::Camera) {
-        self.view_proj = (camera.proj_matrix() * camera.view_matrix()).into();
-    }
-}
-
 struct State {
     gpu: GpuState,
     render_pipeline: wgpu::RenderPipeline,
@@ -45,7 +27,6 @@ struct State {
     diffuse_bind_group: wgpu::BindGroup,
     camera: camera::Camera,
     camera_controller: camera::CameraController,
-    camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     mouse_pressed: bool,
@@ -102,8 +83,7 @@ impl State {
             f32::to_radians(45.0), 0.1, 1000.0);
         let camera_controller = camera::CameraController::new(4.0, 60.0);
 
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        let camera_uniform: [[f32; 4]; 4] = (camera.proj_matrix() * camera.view_matrix()).into();
 
         let camera_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -201,7 +181,6 @@ impl State {
             diffuse_bind_group,
             camera,
             camera_controller,
-            camera_uniform,
             camera_buffer,
             camera_bind_group,
             mouse_pressed: false,
@@ -233,8 +212,8 @@ impl State {
 
     fn update(&mut self, dt: std::time::Duration) {
         self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform.update_view_proj(&self.camera);
-        self.gpu.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        let camera_uniform: [[f32; 4]; 4] = (self.camera.proj_matrix() * self.camera.view_matrix()).into();
+        self.gpu.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[camera_uniform]));
     }
 
     fn render(&mut self, meshes: &[Mesh]) -> Result<(), wgpu::SurfaceError> {
