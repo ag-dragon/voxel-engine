@@ -1,6 +1,6 @@
 use crate::gpu_state::GpuState;
 use crate::mesh::{Mesh, MeshVertex};
-use nalgebra::{point, Point3};
+use nalgebra::Point3;
 use std::slice::Iter;
 
 #[derive(Debug, Clone, Copy)]

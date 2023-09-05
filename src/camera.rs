@@ -1,6 +1,5 @@
-use nalgebra::{Vector3, Point3, Matrix4, base::Unit};
+use nalgebra::{Vector3, Point3, Matrix4};
 use winit::event::*;
-use winit::dpi::PhysicalPosition;
 use std::time::Duration;
 use std::f32::consts::FRAC_PI_2;
 
@@ -92,34 +91,28 @@ impl CameraController {
         }
     }
 
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
+    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) {
         let amount = if state == ElementState::Pressed { 1.0 } else { 0.0 };
         match key {
             VirtualKeyCode::W | VirtualKeyCode::Up => {
                 self.amount_forward = amount;
-                true
             }
             VirtualKeyCode::S | VirtualKeyCode::Down => {
                 self.amount_backward = amount;
-                true
             }
             VirtualKeyCode::A | VirtualKeyCode::Left => {
                 self.amount_left = amount;
-                true
             }
             VirtualKeyCode::D | VirtualKeyCode::Right => {
                 self.amount_right = amount;
-                true
             }
             VirtualKeyCode::Space => {
                 self.amount_up = amount;
-                true
             }
             VirtualKeyCode::LShift => {
                 self.amount_down = amount;
-                true
             }
-            _ => false,
+            _ => {},
         }
     }
 

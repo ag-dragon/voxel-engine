@@ -6,76 +6,15 @@ mod camera;
 mod chunk;
 pub use renderer::Vertex; // Deleting this breaks MeshVertex trait implementation. No clue why
 use gpu_state::GpuState;
-use mesh::{MeshVertex, Mesh};
 use chunk::Chunk;
 
 use winit::{
-    event::{DeviceEvent, Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput, MouseButton},
+    event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
     window::{WindowBuilder},
     dpi::PhysicalPosition,
 };
-use wgpu::util::DeviceExt;
-use nalgebra::{Vector3, Point3, point, Matrix4, base::Unit};
-
-struct State {
-    gpu: GpuState,
-    renderer: renderer::Renderer,
-    camera: camera::Camera,
-    camera_controller: camera::CameraController,
-    mouse_pressed: bool,
-}
-
-impl State {
-    fn new(gpu: GpuState) -> Self {
-        let renderer = renderer::Renderer::new(&gpu);
-
-        let camera = camera::Camera::new(
-            Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
-            gpu.config.width as f32 / gpu.config.height as f32,
-            f32::to_radians(45.0), 0.1, 1000.0);
-        let camera_controller = camera::CameraController::new(4.0, 60.0);
-
-        Self {
-            gpu,
-            renderer,
-            camera,
-            camera_controller,
-            mouse_pressed: false,
-        }
-    }
-
-    fn input(&mut self, event: &WindowEvent) -> bool {
-        match event {
-            WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        virtual_keycode: Some(key),
-                        state,
-                        ..
-                    },
-                ..
-            } => self.camera_controller.process_keyboard(*key, *state),
-            WindowEvent::MouseInput {
-                button: MouseButton::Left,
-                state,
-                ..
-            } => {
-                self.mouse_pressed = *state == ElementState::Pressed;
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn update(&mut self, dt: std::time::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
-    }
-
-    fn render(&mut self, meshes: &[Mesh]) -> Result<(), wgpu::SurfaceError> {
-        self.renderer.render(&self.gpu, &self.camera, meshes)
-    }
-}
+use nalgebra::{Point3, point};
 
 const RENDER_DISTANCE: i32 = 4;
 
@@ -86,7 +25,14 @@ fn main() {
     let window = WindowBuilder::new().with_resizable(false).build(&event_loop).unwrap();
 
     let gpu = futures::executor::block_on(GpuState::new(window));
-    let mut state = State::new(gpu);
+
+    let renderer = renderer::Renderer::new(&gpu);
+
+    let mut camera = camera::Camera::new(
+        Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
+        gpu.config.width as f32 / gpu.config.height as f32,
+        f32::to_radians(45.0), 0.1, 1000.0);
+    let mut camera_controller = camera::CameraController::new(4.0, 60.0);
 
     let mut chunks = Vec::new();
     for x in -RENDER_DISTANCE..RENDER_DISTANCE {
@@ -96,7 +42,7 @@ fn main() {
     }
     let mut chunk_meshes = Vec::new();
     for chunk in &chunks {
-        chunk_meshes.push(chunk.gen_mesh(&state.gpu));
+        chunk_meshes.push(chunk.gen_mesh(&gpu));
     }
 
     let mut last_render_time = std::time::Instant::now();
@@ -108,7 +54,7 @@ fn main() {
             Event::WindowEvent {
                 ref event,
                 window_id,
-            } if window_id == state.gpu.window.id() => if !state.input(event) {
+            } if window_id == gpu.window.id() => {
                 match event {
                     WindowEvent::CloseRequested
                     | WindowEvent::KeyboardInput {
@@ -120,6 +66,15 @@ fn main() {
                             },
                         ..
                     } => *control_flow = ControlFlow::Exit,
+                    WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                virtual_keycode: Some(key),
+                                state,
+                                ..
+                            },
+                        ..
+                    } => camera_controller.process_keyboard(*key, *state),
                     WindowEvent::CursorMoved {
                         position,
                         ..
@@ -127,7 +82,7 @@ fn main() {
                         if mouse_position.x >= 0.0 && mouse_position.y >= 0.0
                             && !((position.x - mouse_position.x).abs() > 20.0
                             || (position.y - mouse_position.y).abs() > 20.0) {
-                            state.camera_controller.process_mouse(
+                            camera_controller.process_mouse(
                                 position.x - mouse_position.x,
                                 position.y - mouse_position.y,
                             );
@@ -138,16 +93,16 @@ fn main() {
                     _ => {}
                 }
             }
-            Event::RedrawRequested(window_id) if window_id == state.gpu.window.id() => {
+            Event::RedrawRequested(window_id) if window_id == gpu.window.id() => {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                state.update(dt);
+                camera_controller.update_camera(&mut camera, dt);
 
                 let c_pos = point![
-                    f32::floor(state.camera.position[0] / chunk::CHUNK_SIZE as f32) as i32,
-                    f32::floor(state.camera.position[1] / chunk::CHUNK_SIZE as f32) as i32,
-                    f32::floor(state.camera.position[2] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(camera.position[0] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(camera.position[1] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(camera.position[2] / chunk::CHUNK_SIZE as f32) as i32,
                 ];
                 for i in 0..chunks.len() {
                     if (c_pos[0] - chunks[i].position[0]).abs() > RENDER_DISTANCE {
@@ -156,7 +111,7 @@ fn main() {
                             chunks[i].position[1],
                             chunks[i].position[2]
                         ]);
-                        chunk_meshes.push(chunk.gen_mesh(&state.gpu));
+                        chunk_meshes.push(chunk.gen_mesh(&gpu));
                         chunks.push(chunk);
                         chunks.remove(i);
                         chunk_meshes.remove(i);
@@ -166,27 +121,21 @@ fn main() {
                             chunks[i].position[1],
                             chunks[i].position[2] + (c_pos[2] - chunks[i].position[2]).signum()*RENDER_DISTANCE*2
                         ]);
-                        chunk_meshes.push(chunk.gen_mesh(&state.gpu));
+                        chunk_meshes.push(chunk.gen_mesh(&gpu));
                         chunks.push(chunk);
                         chunks.remove(i);
                         chunk_meshes.remove(i);
                     }
-                    /*
-                    if (chunk.position - c_pos).norm().abs()
-                        > RENDER_DISTANCE {
-                        println!("too far");
-                    }
-                    */
                 }
 
-                match state.render(&chunk_meshes[..]) {
+                match renderer.render(&gpu, &camera, &chunk_meshes[..]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     Err(e) => eprintln!("{:?}", e),
                 }
             }
             Event::MainEventsCleared => {
-                state.gpu.window.request_redraw();
+                gpu.window.request_redraw();
             }
             _ => (),
         }
