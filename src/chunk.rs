@@ -191,9 +191,9 @@ impl Chunk {
     }
 
     pub fn load_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32) {
-        for x in -range..range {
-            for y in -range..range {
-                for z in -range..range {
+        for x in -range..=range {
+            for y in -range..=range {
+                for z in -range..=range {
                     let chunk_pos = point![
                         position.x + x,
                         position.y + y,
@@ -215,9 +215,9 @@ impl Chunk {
     }
 
     pub fn setup_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32, gpu: &GpuState) {
-        for x in -range..range {
-            for y in -range..range {
-                for z in -range..range {
+        for x in -range..=range {
+            for y in -range..=range {
+                for z in -range..=range {
                     let chunk_pos = point![
                         position.x + x,
                         position.y + y,
