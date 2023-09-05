@@ -12,7 +12,7 @@ use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
     event_loop::{ControlFlow, EventLoop},
     window::{WindowBuilder},
-    dpi::PhysicalPosition,
+    dpi::{PhysicalPosition, LogicalSize},
 };
 use nalgebra::{Point3, point};
 
@@ -22,7 +22,13 @@ fn main() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().with_resizable(false).build(&event_loop).unwrap();
+    let window = WindowBuilder::new()
+        .with_resizable(false)
+        .with_inner_size(LogicalSize {
+            width: 1600,
+            height: 900,
+        })
+        .build(&event_loop).unwrap();
 
     let gpu = futures::executor::block_on(GpuState::new(window));
 
@@ -31,7 +37,7 @@ fn main() {
     let mut camera = camera::Camera::new(
         Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
-        f32::to_radians(45.0), 0.1, 1000.0);
+        f32::to_radians(90.0), 0.1, 1000.0);
     let mut camera_controller = camera::CameraController::new(4.0, 60.0);
 
     let mut chunks = Vec::new();
