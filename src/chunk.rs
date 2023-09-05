@@ -1,6 +1,7 @@
 use crate::gpu_state::GpuState;
 use crate::mesh::{Mesh, MeshVertex};
 use nalgebra::{Point3, point};
+use noise::{NoiseFn, Perlin};
 use std::slice::Iter;
 use std::collections::HashMap;
 
@@ -105,25 +106,21 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new(position: Point3<i32>) -> Self {
-        if position.y == 0 {
-            let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
-                = [BlockType::Dirt; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
-            for i in 0..blocks.len() {
-                if (i / CHUNK_SIZE) % CHUNK_SIZE == CHUNK_SIZE-1 {
-                    blocks[i] = BlockType::Grass;
-                }
+    pub fn new(position: Point3<i32>, height_map: &Perlin) -> Self {
+        let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
+            = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
+        for i in 0..blocks.len() {
+            let terrain_height = height_map.get([
+                (position.x as f64 + ((i % CHUNK_SIZE) as f64) / CHUNK_SIZE as f64) / 10.0,
+                (position.z as f64 + ((i / (CHUNK_SIZE*CHUNK_SIZE)) as f64) / CHUNK_SIZE as f64) / 10.0,
+            ]) * 64.0;
+            if (position.y * CHUNK_SIZE as i32) as f64 + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f64 <= terrain_height {
+                blocks[i] = BlockType::Grass;
             }
-            Self {
-                position,
-                blocks,
-            }
-        } else {
-            let blocks = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
-            Self {
-                position,
-                blocks,
-            }
+        }
+        Self {
+            position,
+            blocks,
         }
     }
 
@@ -190,7 +187,7 @@ impl Chunk {
         Mesh::new(gpu, &chunk_vertices, &chunk_indices)
     }
 
-    pub fn load_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32) {
+    pub fn load_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32, height_map: &Perlin) {
         for x in -range..=range {
             for y in -range..=range {
                 for z in -range..=range {
@@ -199,7 +196,9 @@ impl Chunk {
                         position.y + y,
                         position.z + z,
                     ];
-                    chunk_map.entry(chunk_pos).or_insert((Chunk::new(chunk_pos), None));
+                    if !chunk_map.contains_key(&chunk_pos) {
+                        chunk_map.insert(chunk_pos, (Chunk::new(chunk_pos, height_map), None));
+                    }
                 }
             }
         }

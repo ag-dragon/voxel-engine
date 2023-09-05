@@ -18,9 +18,10 @@ use winit::{
     dpi::{PhysicalPosition, LogicalSize},
 };
 use nalgebra::{Point3, point};
+use noise::{NoiseFn, Perlin, Seedable};
 use std::collections::HashMap;
 
-const RENDER_DISTANCE: i32 = 4;
+const RENDER_DISTANCE: i32 = 8;
 
 fn main() {
     env_logger::init();
@@ -46,6 +47,7 @@ fn main() {
     let mut player = player::Player::new(Point3::new(0.0, 16.0, 4.0), 20.0, 60.0);
 
     let mut chunk_map: HashMap<Point3<i32>, (Chunk, Option<Mesh>)> = HashMap::new();
+    let height_map = Perlin::new(2);
 
     let mut last_render_time = std::time::Instant::now();
     let mut mouse_position = PhysicalPosition::new(-1.0, -1.0);
@@ -108,7 +110,7 @@ fn main() {
                 ];
 
                 Chunk::unload_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE);
-                Chunk::load_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE);
+                Chunk::load_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE, &height_map);
                 Chunk::setup_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE, &gpu);
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
