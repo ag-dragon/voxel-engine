@@ -1,3 +1,4 @@
+use crate::input::InputState;
 use nalgebra::{Vector3, Point3, Matrix4};
 use winit::event::*;
 use std::time::Duration;
@@ -63,12 +64,6 @@ impl Camera {
 
 #[derive(Debug)]
 pub struct CameraController {
-    amount_left: f32,
-    amount_right: f32,
-    amount_forward: f32,
-    amount_backward: f32,
-    amount_up: f32,
-    amount_down: f32,
     rotate_horizontal: f32,
     rotate_vertical: f32,
     speed: f32,
@@ -78,41 +73,10 @@ pub struct CameraController {
 impl CameraController {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
-            amount_left: 0.0,
-            amount_right: 0.0,
-            amount_forward: 0.0,
-            amount_backward: 0.0,
-            amount_up: 0.0,
-            amount_down: 0.0,
             rotate_horizontal: 0.0,
             rotate_vertical: 0.0,
             speed,
             sensitivity,
-        }
-    }
-
-    pub fn process_keyboard(&mut self, key: VirtualKeyCode, state: ElementState) {
-        let amount = if state == ElementState::Pressed { 1.0 } else { 0.0 };
-        match key {
-            VirtualKeyCode::W | VirtualKeyCode::Up => {
-                self.amount_forward = amount;
-            }
-            VirtualKeyCode::S | VirtualKeyCode::Down => {
-                self.amount_backward = amount;
-            }
-            VirtualKeyCode::A | VirtualKeyCode::Left => {
-                self.amount_left = amount;
-            }
-            VirtualKeyCode::D | VirtualKeyCode::Right => {
-                self.amount_right = amount;
-            }
-            VirtualKeyCode::Space => {
-                self.amount_up = amount;
-            }
-            VirtualKeyCode::LShift => {
-                self.amount_down = amount;
-            }
-            _ => {},
         }
     }
 
@@ -121,19 +85,40 @@ impl CameraController {
         self.rotate_vertical = mouse_dy as f32;
     }
 
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
+    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration, input: &InputState) {
         let dt = dt.as_secs_f32();
 
         // Move forward/backward and left/right
         let (yaw_sin, yaw_cos) = camera.yaw.sin_cos();
         let forward = Vector3::new(yaw_cos, 0.0, yaw_sin).normalize();
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
 
-        // Move up/down. Since we don't use roll, we can just
-        // modify the y coordinate directly.
-        camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
+        let mut forward_back = 0.0;
+        if input.keys[VirtualKeyCode::W as usize] {
+            forward_back += 1.0;
+        }
+        if input.keys[VirtualKeyCode::S as usize] {
+            forward_back -= 1.0;
+        }
+        camera.position += forward * forward_back * self.speed * dt;
+
+        let mut right_left = 0.0;
+        if input.keys[VirtualKeyCode::D as usize] {
+            right_left += 1.0;
+        }
+        if input.keys[VirtualKeyCode::A as usize] {
+            right_left -= 1.0;
+        }
+        camera.position += right * right_left * self.speed * dt;
+
+        let mut up_down = 0.0;
+        if input.keys[VirtualKeyCode::Space as usize] {
+            up_down += 1.0;
+        }
+        if input.keys[VirtualKeyCode::LShift as usize]  {
+            up_down -= 1.0;
+        }
+        camera.position.y += up_down * self.speed * dt;
 
         // Rotate
         camera.yaw += f32::to_radians(self.rotate_horizontal) * self.sensitivity * dt;

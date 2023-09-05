@@ -2,6 +2,7 @@ mod gpu_state;
 mod renderer;
 mod texture;
 mod mesh;
+mod input;
 mod camera;
 mod chunk;
 pub use renderer::Vertex; // Deleting this breaks MeshVertex trait implementation. No clue why
@@ -34,6 +35,7 @@ fn main() {
 
     let renderer = renderer::Renderer::new(&gpu);
 
+    let mut input = input::InputState::new();
     let mut camera = camera::Camera::new(
         Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
@@ -80,7 +82,7 @@ fn main() {
                                 ..
                             },
                         ..
-                    } => camera_controller.process_keyboard(*key, *state),
+                    } => input.update(*key, *state),
                     WindowEvent::CursorMoved {
                         position,
                         ..
@@ -103,7 +105,7 @@ fn main() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                camera_controller.update_camera(&mut camera, dt);
+                camera_controller.update_camera(&mut camera, dt, &input);
 
                 let c_pos = point![
                     f32::floor(camera.position[0] / chunk::CHUNK_SIZE as f32) as i32,
