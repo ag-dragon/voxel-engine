@@ -1,5 +1,5 @@
-use crate::Vertex;
 use crate::gpu_state::GpuState;
+use crate::renderer;
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -15,7 +15,7 @@ impl MeshVertex {
         wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3];
 }
 
-impl Vertex for MeshVertex {
+impl renderer::Vertex for MeshVertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<MeshVertex>() as wgpu::BufferAddress,
