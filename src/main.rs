@@ -41,7 +41,7 @@ fn main() {
         Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
         f32::to_radians(90.0), 0.1, 1000.0);
-    let mut player = player::Player::new(4.0, 60.0);
+    let mut player = player::Player::new(Point3::new(0.0, 16.0, 4.0), 4.0, 60.0);
 
     let mut chunks = Vec::new();
     for x in -RENDER_DISTANCE..RENDER_DISTANCE {
@@ -110,9 +110,9 @@ fn main() {
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
 
                 let c_pos = point![
-                    f32::floor(camera.position[0] / chunk::CHUNK_SIZE as f32) as i32,
-                    f32::floor(camera.position[1] / chunk::CHUNK_SIZE as f32) as i32,
-                    f32::floor(camera.position[2] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(player.position[0] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(player.position[1] / chunk::CHUNK_SIZE as f32) as i32,
+                    f32::floor(player.position[2] / chunk::CHUNK_SIZE as f32) as i32,
                 ];
                 for i in 0..chunks.len() {
                     if (c_pos[0] - chunks[i].position[0]).abs() > RENDER_DISTANCE {
