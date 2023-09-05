@@ -176,7 +176,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&self, gpu: &gpu_state::GpuState, camera: &camera::Camera, meshes: &[mesh::Mesh]) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&self, gpu: &gpu_state::GpuState, camera: &camera::Camera, meshes: &[&mesh::Mesh]) -> Result<(), wgpu::SurfaceError> {
         {
             let global_uniforms = GlobalUniforms {
                 view_proj: (camera.proj_matrix() * camera.view_matrix()).into(),

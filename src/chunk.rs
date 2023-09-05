@@ -1,7 +1,8 @@
 use crate::gpu_state::GpuState;
 use crate::mesh::{Mesh, MeshVertex};
-use nalgebra::Point3;
+use nalgebra::{Point3, point};
 use std::slice::Iter;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BlockType {
@@ -105,16 +106,24 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new(position: Point3<i32>) -> Self {
-        let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
-            = [BlockType::Dirt; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
-        for i in 0..blocks.len() {
-            if (i / CHUNK_SIZE) % CHUNK_SIZE == CHUNK_SIZE-1 {
-                blocks[i] = BlockType::Grass;
+        if position.y == 0 {
+            let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
+                = [BlockType::Dirt; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
+            for i in 0..blocks.len() {
+                if (i / CHUNK_SIZE) % CHUNK_SIZE == CHUNK_SIZE-1 {
+                    blocks[i] = BlockType::Grass;
+                }
             }
-        }
-        Self {
-            position,
-            blocks,
+            Self {
+                position,
+                blocks,
+            }
+        } else {
+            let blocks = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
+            Self {
+                position,
+                blocks,
+            }
         }
     }
 
@@ -179,5 +188,49 @@ impl Chunk {
         }
         
         Mesh::new(gpu, &chunk_vertices, &chunk_indices)
+    }
+
+    pub fn load_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32) {
+        for x in -range..range {
+            for y in -range..range {
+                for z in -range..range {
+                    let chunk_pos = point![
+                        position.x + x,
+                        position.y + y,
+                        position.z + z,
+                    ];
+                    chunk_map.entry(chunk_pos).or_insert((Chunk::new(chunk_pos), None));
+                }
+            }
+        }
+    }
+
+    // currently load_chunks allows for things other than the player to load chunks. This doesn't
+    pub fn unload_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32) {
+        chunk_map.retain(|&chunk_pos, _| {
+            (chunk_pos.x - position.x).abs() <= range &&
+            (chunk_pos.y - position.y).abs() <= range &&
+            (chunk_pos.z - position.z).abs() <= range
+        });
+    }
+
+    pub fn setup_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32, gpu: &GpuState) {
+        for x in -range..range {
+            for y in -range..range {
+                for z in -range..range {
+                    let chunk_pos = point![
+                        position.x + x,
+                        position.y + y,
+                        position.z + z,
+                    ];
+                    chunk_map.entry(chunk_pos).and_modify(|(chunk, is_mesh)| {
+                        match is_mesh {
+                            Some(_) => {},
+                            None => *is_mesh = Some(chunk.gen_mesh(gpu)),
+                        };
+                    });
+                }
+            }
+        }
     }
 }

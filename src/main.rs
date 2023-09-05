@@ -9,6 +9,7 @@ mod chunk;
 pub use renderer::Vertex; // Deleting this breaks MeshVertex trait implementation. No clue why
 use gpu_state::GpuState;
 use chunk::Chunk;
+use mesh::Mesh;
 
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
@@ -17,6 +18,7 @@ use winit::{
     dpi::{PhysicalPosition, LogicalSize},
 };
 use nalgebra::{Point3, point};
+use std::collections::HashMap;
 
 const RENDER_DISTANCE: i32 = 4;
 
@@ -41,18 +43,9 @@ fn main() {
         Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
         f32::to_radians(90.0), 0.1, 1000.0);
-    let mut player = player::Player::new(Point3::new(0.0, 16.0, 4.0), 4.0, 60.0);
+    let mut player = player::Player::new(Point3::new(0.0, 16.0, 4.0), 20.0, 60.0);
 
-    let mut chunks = Vec::new();
-    for x in -RENDER_DISTANCE..RENDER_DISTANCE {
-        for z in -RENDER_DISTANCE..RENDER_DISTANCE {
-            chunks.push(Chunk::new(point![x, 0, z]));
-        }
-    }
-    let mut chunk_meshes = Vec::new();
-    for chunk in &chunks {
-        chunk_meshes.push(chunk.gen_mesh(&gpu));
-    }
+    let mut chunk_map: HashMap<Point3<i32>, (Chunk, Option<Mesh>)> = HashMap::new();
 
     let mut last_render_time = std::time::Instant::now();
     let mut mouse_position = PhysicalPosition::new(-1.0, -1.0);
@@ -107,37 +100,26 @@ fn main() {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 player.update(&mut camera, dt, &input);
-                input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
 
-                let c_pos = point![
+                let player_chunk_pos = point![
                     f32::floor(player.position[0] / chunk::CHUNK_SIZE as f32) as i32,
                     f32::floor(player.position[1] / chunk::CHUNK_SIZE as f32) as i32,
                     f32::floor(player.position[2] / chunk::CHUNK_SIZE as f32) as i32,
                 ];
-                for i in 0..chunks.len() {
-                    if (c_pos[0] - chunks[i].position[0]).abs() > RENDER_DISTANCE {
-                        let chunk = Chunk::new(point![
-                            chunks[i].position[0] + (c_pos[0] - chunks[i].position[0]).signum()*RENDER_DISTANCE*2,
-                            chunks[i].position[1],
-                            chunks[i].position[2]
-                        ]);
-                        chunk_meshes.push(chunk.gen_mesh(&gpu));
-                        chunks.push(chunk);
-                        chunks.remove(i);
-                        chunk_meshes.remove(i);
-                    } else if (c_pos[2] - chunks[i].position[2]).abs() > RENDER_DISTANCE {
-                        let chunk = Chunk::new(point![
-                            chunks[i].position[0],
-                            chunks[i].position[1],
-                            chunks[i].position[2] + (c_pos[2] - chunks[i].position[2]).signum()*RENDER_DISTANCE*2
-                        ]);
-                        chunk_meshes.push(chunk.gen_mesh(&gpu));
-                        chunks.push(chunk);
-                        chunks.remove(i);
-                        chunk_meshes.remove(i);
-                    }
-                }
 
+                Chunk::unload_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE);
+                Chunk::load_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE);
+                Chunk::setup_chunks(&mut chunk_map, player_chunk_pos, RENDER_DISTANCE, &gpu);
+
+                input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
+
+                let mut chunk_meshes = Vec::new();
+                for (_, is_mesh) in chunk_map.values() {
+                    match is_mesh {
+                        Some(mesh) => chunk_meshes.push(mesh),
+                        None => {},
+                    };
+                }
                 match renderer.render(&gpu, &camera, &chunk_meshes[..]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
