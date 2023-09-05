@@ -94,28 +94,28 @@ impl CameraController {
         let right = Vector3::new(-yaw_sin, 0.0, yaw_cos).normalize();
 
         let mut forward_back = 0.0;
-        if input.keys[VirtualKeyCode::W as usize] {
+        if input.key_pressed(VirtualKeyCode::W) {
             forward_back += 1.0;
         }
-        if input.keys[VirtualKeyCode::S as usize] {
+        if input.key_pressed(VirtualKeyCode::S) {
             forward_back -= 1.0;
         }
         camera.position += forward * forward_back * self.speed * dt;
 
         let mut right_left = 0.0;
-        if input.keys[VirtualKeyCode::D as usize] {
+        if input.key_pressed(VirtualKeyCode::D) {
             right_left += 1.0;
         }
-        if input.keys[VirtualKeyCode::A as usize] {
+        if input.key_pressed(VirtualKeyCode::A) {
             right_left -= 1.0;
         }
         camera.position += right * right_left * self.speed * dt;
 
         let mut up_down = 0.0;
-        if input.keys[VirtualKeyCode::Space as usize] {
+        if input.key_pressed(VirtualKeyCode::Space) {
             up_down += 1.0;
         }
-        if input.keys[VirtualKeyCode::LShift as usize]  {
+        if input.key_pressed(VirtualKeyCode::LShift)  {
             up_down -= 1.0;
         }
         camera.position.y += up_down * self.speed * dt;

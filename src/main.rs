@@ -82,7 +82,7 @@ fn main() {
                                 ..
                             },
                         ..
-                    } => input.update(*key, *state),
+                    } => input.update_key(*key, *state),
                     WindowEvent::CursorMoved {
                         position,
                         ..

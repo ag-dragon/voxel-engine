@@ -1,7 +1,7 @@
 use winit::event;
 
 pub struct InputState {
-    pub keys: [bool; 163],
+    keys: [bool; 163],
 }
 
 impl InputState {
@@ -11,7 +11,11 @@ impl InputState {
         }
     }
 
-    pub fn update(&mut self, key: event::VirtualKeyCode, state: event::ElementState) {
+    pub fn update_key(&mut self, key: event::VirtualKeyCode, state: event::ElementState) {
         self.keys[key as usize] = state == event::ElementState::Pressed;
+    }
+
+    pub fn key_pressed(&self, key: event::VirtualKeyCode) -> bool {
+        self.keys[key as usize]
     }
 }
