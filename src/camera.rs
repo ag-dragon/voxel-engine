@@ -18,18 +18,27 @@ pub struct Camera {
     pub position: Point3<f32>,
     yaw: f32,
     pitch: f32,
+    aspect: f32,
+    fovy: f32,
+    znear: f32,
+    zfar: f32,
 }
 
 impl Camera {
-    pub fn new(position: Point3<f32>, yaw: f32, pitch: f32) -> Self {
+    pub fn new(position: Point3<f32>, yaw: f32, pitch: f32,
+        aspect: f32, fovy: f32, znear: f32, zfar: f32) -> Self {
         Self {
             position,
             yaw,
-            pitch
+            pitch,
+            aspect,
+            fovy,
+            znear,
+            zfar,
         }
     }
 
-    pub fn calc_matrix(&self) -> Matrix4<f32> {
+    pub fn view_matrix(&self) -> Matrix4<f32> {
         let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
         let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
         let look = Vector3::new(
@@ -45,26 +54,8 @@ impl Camera {
             &Vector3::new(0.0, 1.0, 0.0),
         )
     }
-}
 
-pub struct Projection {
-    aspect: f32,
-    fovy: f32,
-    znear: f32,
-    zfar: f32,
-}
-
-impl Projection {
-    pub fn new(width: u32, height: u32, fovy: f32, znear: f32, zfar: f32) -> Self {
-        Self {
-            aspect: width as f32 / height as f32,
-            fovy,
-            znear,
-            zfar,
-        }
-    }
-
-    pub fn calc_matrix(&self) -> Matrix4<f32> {
+    pub fn proj_matrix(&self) -> Matrix4<f32> {
         let proj = Matrix4::new_perspective(self.aspect, self.fovy, self.znear, self.zfar);
 
         OPENGL_TO_WGPU_MATRIX * proj

@@ -33,8 +33,8 @@ impl CameraUniform {
         }
     }
 
-    fn update_view_proj(&mut self, camera: &camera::Camera, projection: &camera::Projection) {
-        self.view_proj = (projection.calc_matrix() * camera.calc_matrix()).into();
+    fn update_view_proj(&mut self, camera: &camera::Camera) {
+        self.view_proj = (camera.proj_matrix() * camera.view_matrix()).into();
     }
 }
 
@@ -44,7 +44,6 @@ struct State {
     depth_texture: texture::Texture,
     diffuse_bind_group: wgpu::BindGroup,
     camera: camera::Camera,
-    projection: camera::Projection,
     camera_controller: camera::CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
@@ -97,12 +96,14 @@ impl State {
             }
         );
 
-        let camera = camera::Camera::new(Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0));
-        let projection = camera::Projection::new(gpu.config.width, gpu.config.height, f32::to_radians(45.0), 0.1, 100.0);
+        let camera = camera::Camera::new(
+            Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
+            gpu.config.width as f32 / gpu.config.height as f32,
+            f32::to_radians(45.0), 0.1, 1000.0);
         let camera_controller = camera::CameraController::new(4.0, 60.0);
 
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera, &projection);
+        camera_uniform.update_view_proj(&camera);
 
         let camera_buffer = gpu.device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -199,7 +200,6 @@ impl State {
             depth_texture,
             diffuse_bind_group,
             camera,
-            projection,
             camera_controller,
             camera_uniform,
             camera_buffer,
@@ -233,7 +233,7 @@ impl State {
 
     fn update(&mut self, dt: std::time::Duration) {
         self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform.update_view_proj(&self.camera, &self.projection);
+        self.camera_uniform.update_view_proj(&self.camera);
         self.gpu.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
