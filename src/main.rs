@@ -4,6 +4,7 @@ mod texture;
 mod mesh;
 mod input;
 mod camera;
+mod player;
 mod chunk;
 pub use renderer::Vertex; // Deleting this breaks MeshVertex trait implementation. No clue why
 use gpu_state::GpuState;
@@ -40,7 +41,7 @@ fn main() {
         Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
         f32::to_radians(90.0), 0.1, 1000.0);
-    let mut camera_controller = camera::CameraController::new(4.0, 60.0);
+    let mut player = player::Player::new(4.0, 60.0);
 
     let mut chunks = Vec::new();
     for x in -RENDER_DISTANCE..RENDER_DISTANCE {
@@ -105,7 +106,7 @@ fn main() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                camera_controller.update_camera(&mut camera, dt, &input);
+                player.update(&mut camera, dt, &input);
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
 
                 let c_pos = point![
