@@ -90,7 +90,7 @@ fn main() {
                         if mouse_position.x >= 0.0 && mouse_position.y >= 0.0
                             && !((position.x - mouse_position.x).abs() > 20.0
                             || (position.y - mouse_position.y).abs() > 20.0) {
-                            camera_controller.process_mouse(
+                            input.update_mouse(
                                 position.x - mouse_position.x,
                                 position.y - mouse_position.y,
                             );
@@ -106,6 +106,7 @@ fn main() {
                 let dt = now - last_render_time;
                 last_render_time = now;
                 camera_controller.update_camera(&mut camera, dt, &input);
+                input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
 
                 let c_pos = point![
                     f32::floor(camera.position[0] / chunk::CHUNK_SIZE as f32) as i32,

@@ -64,8 +64,6 @@ impl Camera {
 
 #[derive(Debug)]
 pub struct CameraController {
-    rotate_horizontal: f32,
-    rotate_vertical: f32,
     speed: f32,
     sensitivity: f32,
 }
@@ -73,16 +71,9 @@ pub struct CameraController {
 impl CameraController {
     pub fn new(speed: f32, sensitivity: f32) -> Self {
         Self {
-            rotate_horizontal: 0.0,
-            rotate_vertical: 0.0,
             speed,
             sensitivity,
         }
-    }
-
-    pub fn process_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rotate_horizontal = mouse_dx as f32;
-        self.rotate_vertical = mouse_dy as f32;
     }
 
     pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration, input: &InputState) {
@@ -121,14 +112,8 @@ impl CameraController {
         camera.position.y += up_down * self.speed * dt;
 
         // Rotate
-        camera.yaw += f32::to_radians(self.rotate_horizontal) * self.sensitivity * dt;
-        camera.pitch += f32::to_radians(-self.rotate_vertical) * self.sensitivity * dt;
-
-        // If process_mouse isn't called every frame, these values
-        // will not get set to zero, and the camera will rotate
-        // when moving in a non cardinal direction.
-        self.rotate_horizontal = 0.0;
-        self.rotate_vertical = 0.0;
+        camera.yaw += f32::to_radians(input.mouse_delta.0) * self.sensitivity * dt;
+        camera.pitch += f32::to_radians(-input.mouse_delta.1) * self.sensitivity * dt;
 
         // Keep the camera's angle from going too high/low.
         if camera.pitch < -SAFE_FRAC_PI_2 {
