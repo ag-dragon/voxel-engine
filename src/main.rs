@@ -19,7 +19,10 @@ use winit::{
 };
 use nalgebra::{Point3, point};
 use noise::{NoiseFn, Perlin, Seedable};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Mutex, Arc},
+};
 
 const RENDER_DISTANCE: i32 = 8;
 
@@ -38,6 +41,7 @@ fn main() {
     let gpu = futures::executor::block_on(GpuState::new(window));
 
     let renderer = renderer::Renderer::new(&gpu);
+    let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(8).build().unwrap();
 
     let mut input = input::InputState::new();
     let mut camera = camera::Camera::new(
@@ -46,7 +50,7 @@ fn main() {
         f32::to_radians(90.0), 0.1, 1000.0);
     let mut player = player::Player::new(Point3::new(0.0, 16.0, 4.0), 20.0, 60.0);
 
-    let mut chunk_map: HashMap<Point3<i32>, (Chunk, Option<Mesh>)> = HashMap::new();
+    let mut chunk_map: Arc<Mutex<HashMap<Point3<i32>, (Chunk, Option<Mesh>)>>> = Arc::new(Mutex::new(HashMap::new()));
     let height_map = Perlin::new(2);
 
     let mut last_render_time = std::time::Instant::now();
@@ -116,7 +120,8 @@ fn main() {
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
 
                 let mut chunk_meshes = Vec::new();
-                for (_, is_mesh) in chunk_map.values() {
+                let mut cm = chunk_map.lock().unwrap();
+                for (_, is_mesh) in cm.values() {
                     match is_mesh {
                         Some(mesh) => chunk_meshes.push(mesh),
                         None => {},

@@ -1946,6 +1946,7 @@ dependencies = [
  "log",
  "nalgebra",
  "noise",
+ "rayon",
  "wgpu",
  "winit",
 ]

@@ -2,8 +2,11 @@ use crate::gpu_state::GpuState;
 use crate::mesh::{Mesh, MeshVertex};
 use nalgebra::{Point3, point};
 use noise::{NoiseFn, Perlin};
-use std::slice::Iter;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    slice::Iter,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BlockType {
@@ -187,7 +190,9 @@ impl Chunk {
         Mesh::new(gpu, &chunk_vertices, &chunk_indices)
     }
 
-    pub fn load_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32, height_map: &Perlin) {
+    pub fn load_chunks(chunk_map: &mut Arc<Mutex<HashMap<Point3<i32>, (Chunk, Option<Mesh>)>>>, position: Point3<i32>, range: i32, height_map: &Perlin) {
+        let mut chunk_map = chunk_map.lock().unwrap();
+        
         for x in -range..=range {
             for y in -range..=range {
                 for z in -range..=range {
@@ -205,7 +210,8 @@ impl Chunk {
     }
 
     // currently load_chunks allows for things other than the player to load chunks. This doesn't
-    pub fn unload_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32) {
+    pub fn unload_chunks(chunk_map: &mut Arc<Mutex<HashMap<Point3<i32>, (Chunk, Option<Mesh>)>>>, position: Point3<i32>, range: i32) {
+        let mut chunk_map = chunk_map.lock().unwrap();
         chunk_map.retain(|&chunk_pos, _| {
             (chunk_pos.x - position.x).abs() <= range &&
             (chunk_pos.y - position.y).abs() <= range &&
@@ -213,7 +219,8 @@ impl Chunk {
         });
     }
 
-    pub fn setup_chunks(chunk_map: &mut HashMap<Point3<i32>, (Chunk, Option<Mesh>)>, position: Point3<i32>, range: i32, gpu: &GpuState) {
+    pub fn setup_chunks(chunk_map: &mut Arc<Mutex<HashMap<Point3<i32>, (Chunk, Option<Mesh>)>>>, position: Point3<i32>, range: i32, gpu: &GpuState) {
+        let mut chunk_map = chunk_map.lock().unwrap();
         for x in -range..=range {
             for y in -range..=range {
                 for z in -range..=range {
