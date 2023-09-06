@@ -48,13 +48,13 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(gpu: &GpuState, mesh: &CMesh) -> Self {
-        let vertex_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    pub fn new(device: &wgpu::Device, mesh: &CMesh) -> Self {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Vertex Buffer"),
             contents: bytemuck::cast_slice(&mesh.vertices[..]),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        let index_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Index Buffer"),
             contents: bytemuck::cast_slice(&mesh.indices[..]),
             usage: wgpu::BufferUsages::INDEX,
