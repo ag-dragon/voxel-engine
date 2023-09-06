@@ -1,5 +1,5 @@
 use crate::gpu_state::GpuState;
-use crate::mesh::{Mesh, MeshVertex};
+use crate::mesh::{CMesh, Mesh, MeshVertex};
 use nalgebra::{Point3, point};
 use noise::{NoiseFn, Perlin};
 use std::{
@@ -187,7 +187,7 @@ impl Chunk {
             }
         }
         
-        Mesh::new(gpu, &chunk_vertices, &chunk_indices)
+        Mesh::new(gpu, &CMesh::new(&chunk_vertices, &chunk_indices))
     }
 
     pub fn load_chunks(chunk_map: &mut Arc<Mutex<HashMap<Point3<i32>, (Chunk, Option<Mesh>)>>>, position: Point3<i32>, range: i32, height_map: &Perlin) {

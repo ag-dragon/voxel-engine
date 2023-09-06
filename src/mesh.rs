@@ -25,6 +25,22 @@ impl renderer::Vertex for MeshVertex {
     }
 }
 
+// mesh stored on cpu
+pub struct CMesh {
+    vertices: Vec<MeshVertex>,
+    indices: Vec<u32>,
+}
+
+impl CMesh {
+    pub fn new(vertices: &[MeshVertex], indices: &[u32]) -> Self {
+        Self {
+            vertices: vertices.to_vec(),
+            indices: indices.to_vec(),
+        }
+    }
+}
+
+// mesh stored on gpu
 pub struct Mesh {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -32,22 +48,22 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(gpu: &GpuState, vertices: &[MeshVertex], indices: &[u32]) -> Self {
+    pub fn new(gpu: &GpuState, mesh: &CMesh) -> Self {
         let vertex_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
+            contents: bytemuck::cast_slice(&mesh.vertices[..]),
             usage: wgpu::BufferUsages::VERTEX,
         });
         let index_buffer = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Mesh Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
+            contents: bytemuck::cast_slice(&mesh.indices[..]),
             usage: wgpu::BufferUsages::INDEX,
         });
 
         Self {
             vertex_buffer,
             index_buffer,
-            num_elements: indices.len() as u32,
+            num_elements: mesh.indices.len() as u32,
         }
     }
 }
