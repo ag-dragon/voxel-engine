@@ -2,7 +2,7 @@ use crate::chunk::{Chunk, CHUNK_SIZE, BlockType, BlockFace};
 use crate::mesh::{Mesh, CMesh, MeshVertex};
 use nalgebra::{Point3, point};
 use rayon::ThreadPool;
-use noise::{NoiseFn, Perlin};
+use noise::{NoiseFn, Perlin, Curve};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Mutex, Arc},
@@ -12,7 +12,15 @@ const RENDER_DISTANCE: i32 = 8;
 
 // function used by worker threads
 pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
-    let perlin = Perlin::new(1324);
+    let perlin = Perlin::new(134);
+    let mut continental_noise: Curve<f64, Perlin, 2> = Curve::new(perlin);
+    continental_noise = continental_noise.add_control_point(-1.01, 50.0);
+    continental_noise = continental_noise.add_control_point(-1.0, 0.0);
+    continental_noise = continental_noise.add_control_point(-0.2, 50.0);
+    continental_noise = continental_noise.add_control_point(0.2, 60.0);
+    continental_noise = continental_noise.add_control_point(0.6, 60.0);
+    continental_noise = continental_noise.add_control_point(1.0, 150.0);
+    continental_noise = continental_noise.add_control_point(1.01, 100.0);
     let mut chunk = Chunk::new();
 
     let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
@@ -21,21 +29,41 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
         let x = i % CHUNK_SIZE;
         let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
         let z = i / (CHUNK_SIZE*CHUNK_SIZE);
-        let terrain_height = ((perlin.get([
-            ((chunk_pos.x * CHUNK_SIZE as i32) + x as i32) as f64 / 80.0,
-            ((chunk_pos.z * CHUNK_SIZE as i32) + z as i32) as f64 / 80.0,
-        ]) + 1.0) / 2.0) * 32.0;
+        let px = ((chunk_pos.x * CHUNK_SIZE as i32) + x as i32) as f64;
+        let pz = ((chunk_pos.z * CHUNK_SIZE as i32) + z as i32) as f64;
+        let continental = &continental_noise.get([
+            px / 320.0,
+            pz / 320.0,
+        ]);
+        let nv1 = perlin.get([
+            px / 160.0,
+            pz / 160.0,
+        ]) * 16.0;
+        let nv2 = perlin.get([
+            px / 80.0,
+            pz / 80.0,
+        ]) * 16.0;
+        let nv3 = perlin.get([
+            px / 40.0,
+            pz / 40.0,
+        ]) * 16.0;
+        let terrain_height = continental + nv1 + 0.5*nv2 + 0.25*nv3;
         let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64;
         if terrain_height > block_height {
-            if block_height < 0.0 {
-                blocks[i] = BlockType::Stone;
-            } else if block_height < 8.0 {
-                blocks[i] = BlockType::Sand;
-            } else if (terrain_height - block_height).abs() <= 1.0 {
-                blocks[i] = BlockType::Grass;
-            } else {
-                blocks[i] = BlockType::Dirt;
-            }
+            blocks[i] = BlockType::Stone;
+        }
+    }
+
+    for i in 0..blocks.len() {
+        match blocks[i] {
+            BlockType::Air => {
+                let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
+                let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64;
+                if block_height <= 40.0 {
+                    blocks[i] = BlockType::Sand;
+                }
+            },
+            _ => {},
         }
     }
 
