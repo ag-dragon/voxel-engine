@@ -16,7 +16,7 @@ const RENDER_DISTANCE: i32 = 4;
 
 // function used by worker threads
 pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
-    let perlin = Perlin::new(1);
+    let perlin = Perlin::new(1324);
     let mut chunk = Chunk::new();
 
     let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
@@ -26,10 +26,9 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
         let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
         let z = i / (CHUNK_SIZE*CHUNK_SIZE);
         if perlin.get([
-            ((chunk_pos.x * CHUNK_SIZE as i32) + x as i32) as f64 / 50.0,
-            ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64 / 50.0,
-            ((chunk_pos.z * CHUNK_SIZE as i32) + z as i32) as f64 / 50.0,
-        ]) > 0.5 {
+            ((chunk_pos.x * CHUNK_SIZE as i32) + x as i32) as f64 / 100.0,
+            ((chunk_pos.z * CHUNK_SIZE as i32) + z as i32) as f64 / 100.0,
+        ])  * 64.0 > ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64 {
             blocks[i] = BlockType::Grass;
         }
     }
@@ -215,7 +214,8 @@ impl Terrain {
     // spawns new tasks for worker threads from mesh todo list
     // sends completed meshes to gpu and adds to meshed chunks map
     pub fn update(&mut self, player_pos: Point3<i32>, device: &wgpu::Device) {
-        if player_pos != self.player_chunk {
+        if player_pos != self.player_chunk ||
+            (self.chunk_map.is_empty() && self.load_todo.is_empty() && self.loading.is_empty()) {
             self.load_chunks(player_pos);
             self.unload_chunks(player_pos);
             self.player_chunk = player_pos;
