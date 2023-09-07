@@ -28,16 +28,19 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
         let terrain_height = ((perlin.get([
             ((chunk_pos.x * CHUNK_SIZE as i32) + x as i32) as f64 / 80.0,
             ((chunk_pos.z * CHUNK_SIZE as i32) + z as i32) as f64 / 80.0,
-        ]) + 1.0) / 2.0) * 64.0; 
+        ]) + 1.0) / 2.0) * 32.0;
         let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64;
         if terrain_height > block_height {
             if block_height < 8.0 {
                 blocks[i] = BlockType::Sand;
-            } else {
+            } else if (terrain_height - block_height).abs() <= 1.0 {
                 blocks[i] = BlockType::Grass;
+            } else {
+                blocks[i] = BlockType::Dirt;
             }
         }
     }
+
     chunk.set(blocks);
     chunk
 }
