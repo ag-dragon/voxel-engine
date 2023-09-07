@@ -45,22 +45,12 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
     chunk
 }
 
-// function used by worker threads
-pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
-    let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
-    let mut chunk_indices: Vec<u32> = Vec::new();
-    let mut o: u32 = 0;
+pub fn get_neighbor(block: usize, face: &BlockFace, chunk: &Chunk, neighbors: &[Chunk]) -> BlockType {
+                    let x = block % CHUNK_SIZE;
+                    let y = (block / CHUNK_SIZE) % CHUNK_SIZE;
+                    let z = block / (CHUNK_SIZE*CHUNK_SIZE);
 
-    for (i, block) in chunk.blocks.into_iter().enumerate() {
-        match block {
-            BlockType::Air => {},
-            _ => {
-                for face in BlockFace::iterator() {
-                    let x = i % CHUNK_SIZE;
-                    let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
-                    let z = i / (CHUNK_SIZE*CHUNK_SIZE);
-
-                    let neighbor = match face {
+                    match face {
                         BlockFace::Front => {
                             if z < CHUNK_SIZE-1 { chunk.get_block(x, y, z+1) } else { neighbors[BlockFace::Front as usize].get_block(x, y, 0) }
                         },
@@ -79,27 +69,46 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
                         BlockFace::Right => {
                             if x < CHUNK_SIZE-1 { chunk.get_block(x+1, y, z) } else { neighbors[BlockFace::Right as usize].get_block(0, y, z) }
                         },
-                    };
+                    }
+}
 
-                    match neighbor {
+// function used by worker threads
+pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
+    let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
+    let mut chunk_indices: Vec<u32> = Vec::new();
+    let mut o: u32 = 0;
+
+    for (i, block) in chunk.blocks.into_iter().enumerate() {
+        match block {
+            BlockType::Air => {},
+            _ => {
+                for face in BlockFace::iterator() {
+                    match get_neighbor(i, face, &chunk, neighbors) {
                         BlockType::Air => {
                             chunk_vertices.extend(
-                                face.get_vertices().into_iter().map(|v| MeshVertex {
-                                    position: [
-                                        (chunk_pos.x * CHUNK_SIZE as i32) as f32
-                                            + v.position[0] + (i % CHUNK_SIZE) as f32,
-                                        (chunk_pos.y * CHUNK_SIZE as i32) as f32
-                                            + v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
-                                        (chunk_pos.z * CHUNK_SIZE as i32) as f32
-                                            + v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
-                                    ],
-                                    tex_coords: [
-                                        (block.texture(face) % 16) as f32 * 0.0625
-                                            + (v.tex_coords[0] * 0.0625),
-                                        (block.texture(face) / 16) as f32 * 0.0625
-                                            + (v.tex_coords[1] * 0.0625),
-                                    ],
-                                    normal: v.normal,
+                                face.get_vertices().into_iter().map(|v| {
+                                    MeshVertex {
+                                        position: [
+                                            (chunk_pos.x * CHUNK_SIZE as i32) as f32
+                                                + v.position[0] + (i % CHUNK_SIZE) as f32,
+                                            (chunk_pos.y * CHUNK_SIZE as i32) as f32
+                                                + v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
+                                            (chunk_pos.z * CHUNK_SIZE as i32) as f32
+                                                + v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
+                                        ],
+                                        tex_coords: [
+                                            (block.texture(face) % 16) as f32 * 0.0625
+                                                + (v.tex_coords[0] * 0.0625),
+                                            (block.texture(face) / 16) as f32 * 0.0625
+                                                + (v.tex_coords[1] * 0.0625),
+                                        ],
+                                        normal: v.normal,
+                                        ao: match face {
+                                            BlockFace::Front => 2.0,
+                                            BlockFace::Right => 2.0,
+                                            _ => 0.0,
+                                        },
+                                    }
                                 })
                             );
                             chunk_indices.extend_from_slice(&[o+0,o+2,o+1,o+2,o+3,o+1]);
