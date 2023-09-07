@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 pub struct GpuState {
-    pub device: wgpu::Device,
+    pub device: Arc<wgpu::Device>,
     pub queue: wgpu::Queue,
     pub surface: wgpu::Surface,
     pub config: wgpu::SurfaceConfiguration,
@@ -50,7 +52,7 @@ impl GpuState {
         surface.configure(&device, &config);
 
         Self {
-            device,
+            device: Arc::new(device),
             queue,
             surface,
             config,
