@@ -7,7 +7,27 @@ use std::{
     sync::{Mutex, Arc},
 };
 
+
+// TEMP
+use std::time::{Duration, SystemTime};
+
 const RENDER_DISTANCE: i32 = 4;
+
+// function used by worker threads
+pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
+    let mut chunk = Chunk::new();
+
+    let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
+        = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
+    for i in 0..blocks.len() {
+                let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
+        if chunk_pos.y == 0 && (i / CHUNK_SIZE) % CHUNK_SIZE == 0 {
+            blocks[i] = BlockType::Grass;
+        }
+    }
+    chunk.set(blocks);
+    chunk
+}
 
 // function used by worker threads
 pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
@@ -83,8 +103,10 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
 pub struct Terrain {
     thread_pool: ThreadPool,
     player_chunk: Point3<i32>,
-    loaded_chunks: HashMap<Point3<i32>, Chunk>,
+    chunk_map: HashMap<Point3<i32>, Chunk>,
     load_todo: Vec<Point3<i32>>,
+    loading: Vec<Point3<i32>>,
+    loaded_chunks: Arc<Mutex<Vec<(Point3<i32>, Chunk)>>>,
     meshed_chunks: HashMap<Point3<i32>, Mesh>,
     meshes_todo: Vec<Point3<i32>>,
     meshes_completed: Arc<Mutex<Vec<(Point3<i32>, CMesh)>>>,
@@ -94,8 +116,11 @@ impl Terrain {
     pub fn new() -> Self {
         let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
         let player_chunk = point![0, 0, 0];
-        let loaded_chunks: HashMap<Point3<i32>, Chunk> = HashMap::new();
+        let chunk_map: HashMap<Point3<i32>, Chunk> = HashMap::new();
         let load_todo: Vec<Point3<i32>> = Vec::new();
+        let loading: Vec<Point3<i32>> = Vec::new();
+        let loaded_chunks: Arc<Mutex<Vec<(Point3<i32>, Chunk)>>>
+            = Arc::new(Mutex::new(Vec::new()));
         let meshed_chunks: HashMap<Point3<i32>, Mesh> = HashMap::new();
         let meshes_todo: Vec<Point3<i32>> = Vec::new();
         let meshes_completed: Arc<Mutex<Vec<(Point3<i32>, CMesh)>>>
@@ -104,30 +129,18 @@ impl Terrain {
         Self {
             thread_pool,
             player_chunk,
-            loaded_chunks,
+            chunk_map,
             load_todo,
+            loading,
+            loaded_chunks,
             meshed_chunks,
             meshes_todo,
             meshes_completed,
         }
     }
 
-    pub fn add_chunk(&mut self, chunk_pos: Point3<i32>) {
-        let mut chunk = Chunk::new();
-
-        let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
-            = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
-        for i in 0..blocks.len() {
-                    let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
-            if chunk_pos.y == 0 && (i / CHUNK_SIZE) % CHUNK_SIZE == 0 {
-                blocks[i] = BlockType::Grass;
-            }
-        }
-        chunk.set(blocks);
-
-        // TODO: set chunk data here
-
-        if let Some(old_chunk) = self.loaded_chunks.insert(chunk_pos, chunk) {
+    pub fn add_chunk(&mut self, chunk_pos: Point3<i32>, chunk: Chunk) {
+        if let Some(old_chunk) = self.chunk_map.insert(chunk_pos, chunk) {
             // we just overwrote another chunk, no reason this should be able to happen currently
             eprintln!["uh oh, a chunk was overwritten by another"];
         }
@@ -141,7 +154,7 @@ impl Terrain {
 
     // unload chunk
     pub fn remove_chunk(&mut self, chunk_pos: Point3<i32>) {
-        self.loaded_chunks.remove(&chunk_pos);
+        self.chunk_map.remove(&chunk_pos);
         self.meshed_chunks.remove(&chunk_pos);
         self.load_todo.retain(|chunk| *chunk != chunk_pos);
         self.meshes_todo.retain(|chunk| *chunk != chunk_pos);
@@ -157,11 +170,13 @@ impl Terrain {
                         chunk_pos.y + y,
                         chunk_pos.z + z,
                     ];
-                    if !self.loaded_chunks.contains_key(&cpos)
-                    && !self.load_todo.contains(&cpos) {
+                    if !self.chunk_map.contains_key(&cpos)
+                    && !self.load_todo.contains(&cpos) 
+                    && !self.loading.contains(&cpos) {
                         self.load_todo.push(cpos);
                     } else if !self.meshed_chunks.contains_key(&cpos)
-                    && !self.load_todo.contains(&cpos) {
+                    && !self.load_todo.contains(&cpos)
+                    && !self.loading.contains(&cpos) {
                         if (cpos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
                         && (cpos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
                         && (cpos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
@@ -175,7 +190,7 @@ impl Terrain {
 
     // upon entering new chunk, remove all chunks that are too far from player
     pub fn unload_chunks(&mut self, chunk_pos: Point3<i32>) {
-        let mut unload_chunks: Vec<Point3<i32>> = self.loaded_chunks.keys().cloned().collect();
+        let mut unload_chunks: Vec<Point3<i32>> = self.chunk_map.keys().cloned().collect();
         unload_chunks.retain(|cpos| {
             (cpos.x - chunk_pos.x).abs() > RENDER_DISTANCE+1
             || (cpos.y - chunk_pos.y).abs() > RENDER_DISTANCE+1
@@ -198,16 +213,31 @@ impl Terrain {
             self.player_chunk = player_pos;
         }
 
-        for i in 0..10 {
-            if let Some(to_load) = self.load_todo.pop() {
-                self.add_chunk(to_load);
-            }
+        for chunk in self.load_todo.drain(..) {
+            let tchunk = chunk.clone();
+            let loaded_chunks = Arc::clone(&self.loaded_chunks);
+            self.thread_pool.spawn(move || {
+                let output_chunk = gen_chunk(tchunk);
+                loaded_chunks.lock().unwrap().push((tchunk, output_chunk));
+            });
+            self.loading.push(chunk);
+        }
+
+        let mut lc = self.loaded_chunks.lock().unwrap();
+        let mut to_add = Vec::new();
+        for (pos, chunk) in lc.drain(..) {
+            to_add.push((pos, chunk));
+        }
+        drop(lc);
+        for (pos, chunk) in to_add.drain(..) {
+            self.add_chunk(pos, chunk);
+            self.loading.retain(|c| *c != pos);
         }
 
         let mut assigned_meshes: Vec<Point3<i32>> = Vec::new();
         'workers: for chunk in &self.meshes_todo {
             let tchunk = chunk.clone();
-            let chunk_data = (*self.loaded_chunks.get(&chunk).unwrap()).clone();
+            let chunk_data = (*self.chunk_map.get(&chunk).unwrap()).clone();
             let neighbor_positions = [
                 point![chunk.x, chunk.y, chunk.z+1],
                 point![chunk.x, chunk.y, chunk.z-1],
@@ -218,7 +248,7 @@ impl Terrain {
             ];
             let mut neighbor_chunks = Vec::new();
             for pos in &neighbor_positions {
-                match self.loaded_chunks.get(&pos) {
+                match self.chunk_map.get(&pos) {
                     Some(chunk) => neighbor_chunks.push((*chunk).clone()),
                     None => {
                         continue 'workers;
@@ -237,7 +267,7 @@ impl Terrain {
 
         let mut cm = self.meshes_completed.lock().unwrap();
         for (chunk, mesh) in cm.drain(..) {
-            if self.loaded_chunks.contains_key(&chunk) {
+            if self.chunk_map.contains_key(&chunk) {
                 self.meshed_chunks.insert(chunk, Mesh::new(device, &mesh));
             }
         }
