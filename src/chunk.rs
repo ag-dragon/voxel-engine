@@ -14,6 +14,8 @@ pub enum BlockType {
     Air,
     Grass,
     Dirt,
+    Stone,
+    Sand,
 }
 
 impl BlockType {
@@ -25,6 +27,8 @@ impl BlockType {
                 _ => 1,
             },
             BlockType::Dirt => 2,
+            BlockType::Stone => 3,
+            BlockType::Sand => 4,
             _ => 255, // Missing Texture
         }
     }
