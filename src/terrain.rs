@@ -2,6 +2,7 @@ use crate::chunk::{Chunk, CHUNK_SIZE, BlockType, BlockFace};
 use crate::mesh::{Mesh, CMesh, MeshVertex};
 use nalgebra::{Point3, point};
 use rayon::ThreadPool;
+use noise::{NoiseFn, Perlin, Seedable};
 use std::{
     collections::HashMap,
     sync::{Mutex, Arc},
@@ -15,13 +16,20 @@ const RENDER_DISTANCE: i32 = 4;
 
 // function used by worker threads
 pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
+    let perlin = Perlin::new(1);
     let mut chunk = Chunk::new();
 
     let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
         = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
     for i in 0..blocks.len() {
-                let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
-        if chunk_pos.y == 0 && (i / CHUNK_SIZE) % CHUNK_SIZE == 0 {
+        let x = i % CHUNK_SIZE;
+        let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
+        let z = i / (CHUNK_SIZE*CHUNK_SIZE);
+        if perlin.get([
+            ((chunk_pos.x * CHUNK_SIZE as i32) + x as i32) as f64 / 50.0,
+            ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64 / 50.0,
+            ((chunk_pos.z * CHUNK_SIZE as i32) + z as i32) as f64 / 50.0,
+        ]) > 0.5 {
             blocks[i] = BlockType::Grass;
         }
     }
