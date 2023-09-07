@@ -1,13 +1,5 @@
-use crate::gpu_state::GpuState;
-use crate::mesh::{CMesh, Mesh, MeshVertex};
-use nalgebra::{Point3, point};
-use noise::{NoiseFn, Perlin};
-use std::{
-    collections::HashMap,
-    collections::hash_map::Entry,
-    slice::Iter,
-    sync::{Arc, Mutex},
-};
+use crate::mesh::MeshVertex;
+use std::slice::Iter;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BlockType {
@@ -122,7 +114,7 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new() -> Self {
-        let mut blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
+        let blocks: [BlockType; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
             = [BlockType::Air; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE];
 
         Self {

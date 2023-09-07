@@ -8,8 +8,6 @@ mod player;
 mod chunk;
 mod terrain;
 use gpu_state::GpuState;
-use chunk::Chunk;
-use mesh::{Mesh, CMesh};
 
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
@@ -18,11 +16,6 @@ use winit::{
     dpi::{PhysicalPosition, LogicalSize},
 };
 use nalgebra::{Point3, point};
-use noise::Perlin;
-use std::{
-    collections::HashMap,
-    sync::{Mutex, Arc},
-};
 
 fn main() {
     env_logger::init();
@@ -48,7 +41,6 @@ fn main() {
     let mut player = player::Player::new(Point3::new(0.0, 16.0, 4.0), 20.0, 60.0);
 
     let mut terrain = terrain::Terrain::new();
-    //let height_map = Perlin::new(2);
 
     let mut last_render_time = std::time::Instant::now();
     let mut mouse_position = PhysicalPosition::new(-1.0, -1.0);

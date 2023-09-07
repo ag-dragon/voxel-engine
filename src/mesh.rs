@@ -1,4 +1,3 @@
-use crate::gpu_state::GpuState;
 use crate::renderer;
 use wgpu::util::DeviceExt;
 

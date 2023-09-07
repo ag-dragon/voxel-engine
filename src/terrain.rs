@@ -2,15 +2,11 @@ use crate::chunk::{Chunk, CHUNK_SIZE, BlockType, BlockFace};
 use crate::mesh::{Mesh, CMesh, MeshVertex};
 use nalgebra::{Point3, point};
 use rayon::ThreadPool;
-use noise::{NoiseFn, Perlin, Seedable};
+use noise::{NoiseFn, Perlin};
 use std::{
     collections::{HashMap, VecDeque},
     sync::{Mutex, Arc},
 };
-
-
-// TEMP
-use std::time::{Duration, SystemTime};
 
 const RENDER_DISTANCE: i32 = 8;
 
@@ -31,7 +27,9 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
         ]) + 1.0) / 2.0) * 32.0;
         let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64;
         if terrain_height > block_height {
-            if block_height < 8.0 {
+            if block_height < 0.0 {
+                blocks[i] = BlockType::Stone;
+            } else if block_height < 8.0 {
                 blocks[i] = BlockType::Sand;
             } else if (terrain_height - block_height).abs() <= 1.0 {
                 blocks[i] = BlockType::Grass;
@@ -140,7 +138,6 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
 }
 
 pub struct Terrain {
-    generated: bool,
     thread_pool: ThreadPool,
     player_chunk: Point3<i32>,
     chunk_map: HashMap<Point3<i32>, Chunk>,
@@ -169,7 +166,6 @@ impl Terrain {
             = Arc::new(Mutex::new(Vec::new()));
 
         Self {
-            generated: false,
             thread_pool,
             player_chunk,
             chunk_map,
@@ -202,7 +198,7 @@ impl Terrain {
     }
 
     pub fn add_chunk(&mut self, chunk_pos: Point3<i32>, chunk: Chunk) {
-        if let Some(old_chunk) = self.chunk_map.insert(chunk_pos, chunk) {
+        if let Some(_) = self.chunk_map.insert(chunk_pos, chunk) {
             // we just overwrote another chunk, no reason this should be able to happen currently
             eprintln!["uh oh, a chunk was overwritten by another"];
         }
