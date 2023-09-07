@@ -45,33 +45,6 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
     chunk
 }
 
-pub fn get_neighbor(block: usize, face: &BlockFace, chunk: &Chunk, neighbors: &[Chunk]) -> BlockType {
-                    let x = block % CHUNK_SIZE;
-                    let y = (block / CHUNK_SIZE) % CHUNK_SIZE;
-                    let z = block / (CHUNK_SIZE*CHUNK_SIZE);
-
-                    match face {
-                        BlockFace::Front => {
-                            if z < CHUNK_SIZE-1 { chunk.get_block(x, y, z+1) } else { neighbors[BlockFace::Front as usize].get_block(x, y, 0) }
-                        },
-                        BlockFace::Back => {
-                            if z > 0 { chunk.get_block(x, y, z-1) } else { neighbors[BlockFace::Back as usize].get_block(x, y, CHUNK_SIZE-1) }
-                        },
-                        BlockFace::Top => {
-                            if y < CHUNK_SIZE-1 { chunk.get_block(x, y+1, z) } else { neighbors[BlockFace::Top as usize].get_block(x, 0, z) }
-                        },
-                        BlockFace::Bottom => {
-                            if y > 0 { chunk.get_block(x, y-1, z) } else { neighbors[BlockFace::Bottom as usize].get_block(x, CHUNK_SIZE-1, z) }
-                        },
-                        BlockFace::Left => {
-                            if x > 0 { chunk.get_block(x-1, y, z) } else { neighbors[BlockFace::Left as usize].get_block(CHUNK_SIZE-1, y, z) }
-                        },
-                        BlockFace::Right => {
-                            if x < CHUNK_SIZE-1 { chunk.get_block(x+1, y, z) } else { neighbors[BlockFace::Right as usize].get_block(0, y, z) }
-                        },
-                    }
-}
-
 // function used by worker threads
 pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
     let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
@@ -83,10 +56,55 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
             BlockType::Air => {},
             _ => {
                 for face in BlockFace::iterator() {
-                    match get_neighbor(i, face, &chunk, neighbors) {
+                    let x = i % CHUNK_SIZE;
+                    let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
+                    let z = i / (CHUNK_SIZE*CHUNK_SIZE);
+                    let mut nx: i32 = x as i32;
+                    let mut ny: i32 = y as i32;
+                    let mut nz: i32 = z as i32;
+                    match face {
+                        BlockFace::Top => ny += 1,
+                        BlockFace::Bottom => ny -= 1,
+                        BlockFace::Front => nz += 1,
+                        BlockFace::Back => nz -= 1,
+                        BlockFace::Right => nx += 1,
+                        BlockFace::Left => nx -= 1,
+                    }
+                    match chunk.get_block_border(neighbors, nx, ny, nz) {
                         BlockType::Air => {
                             chunk_vertices.extend(
                                 face.get_vertices().into_iter().map(|v| {
+                                    let mut ao = 0.0;
+                                    let n1 = point![
+                                        x as i32 + (v.position[0] * 2.0) as i32,
+                                        y as i32 + (v.position[1] * 2.0) as i32,
+                                        z as i32,
+                                    ];
+                                    let n2 = point![
+                                        x as i32,
+                                        y as i32 + (v.position[1] * 2.0) as i32,
+                                        z as i32 + (v.position[2] * 2.0) as i32,
+                                    ];
+                                    let n3 = point![
+                                        x as i32 + (v.position[0] * 2.0) as i32,
+                                        y as i32 + (v.position[1] * 2.0) as i32,
+                                        z as i32 + (v.position[2] * 2.0) as i32,
+                                    ];
+
+                                    let mut cv = false;
+                                    if chunk.get_block_border(neighbors, n1.x, n1.y, n1.z).opaque() {
+                                        ao += 1.0;
+                                        cv = true;
+                                    }
+                                    if chunk.get_block_border(neighbors, n2.x, n2.y, n2.z).opaque() {
+                                        ao += 1.0;
+                                        cv = true;
+                                    }
+                                    if cv && chunk.get_block_border(neighbors, n3.x, n3.y, n3.z).opaque() {
+                                        ao += 1.0;
+                                    }
+                                    
+
                                     MeshVertex {
                                         position: [
                                             (chunk_pos.x * CHUNK_SIZE as i32) as f32
@@ -103,11 +121,7 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
                                                 + (v.tex_coords[1] * 0.0625),
                                         ],
                                         normal: v.normal,
-                                        ao: match face {
-                                            BlockFace::Front => 2.0,
-                                            BlockFace::Right => 2.0,
-                                            _ => 0.0,
-                                        },
+                                        ao,
                                     }
                                 })
                             );
@@ -320,22 +334,20 @@ impl Terrain {
             //'workers: for chunk in &self.meshes_todo {
                     let tchunk = chunk.clone();
                     let chunk_data = (*self.chunk_map.get(&chunk).unwrap()).clone();
-                    let neighbor_positions = [
-                        point![chunk.x, chunk.y, chunk.z+1],
-                        point![chunk.x, chunk.y, chunk.z-1],
-                        point![chunk.x, chunk.y+1, chunk.z],
-                        point![chunk.x, chunk.y-1, chunk.z],
-                        point![chunk.x-1, chunk.y, chunk.z],
-                        point![chunk.x+1, chunk.y, chunk.z],
-                    ];
                     let mut neighbor_chunks = Vec::new();
-                    for pos in &neighbor_positions {
-                        match self.chunk_map.get(&pos) {
-                            Some(chunk) => neighbor_chunks.push((*chunk).clone()),
-                            None => {
-                                self.meshes_todo.push_back(chunk);
-                                continue 'workers;
-                            },
+                    for z in -1..=1 {
+                        for y in -1..=1 {
+                            for x in -1..=1 {
+                                match self.chunk_map.get(&point![
+                                    chunk.x+x, chunk.y+y, chunk.z+z
+                                ]) {
+                                    Some(chunk) => neighbor_chunks.push((*chunk).clone()),
+                                    None => {
+                                        self.meshes_todo.push_back(chunk);
+                                        continue 'workers;
+                                    },
+                                }
+                            }
                         }
                     }
                     let completed_meshes = Arc::clone(&self.meshes_completed);
