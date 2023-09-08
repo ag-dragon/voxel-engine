@@ -60,10 +60,40 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
                 let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
                 let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64;
                 if block_height <= 40.0 {
-                    blocks[i] = BlockType::Sand;
+                    //water goes here
+                    blocks[i] = BlockType::Stone;
                 }
             },
             _ => {},
+        }
+    }
+    for x in 0..CHUNK_SIZE {
+        for z in 0..CHUNK_SIZE {
+            let mut max_y = 0;
+            let mut not_air = false;
+            for y in 0..CHUNK_SIZE {
+                match blocks[x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] {
+                    BlockType::Air => {},
+                    _ => {
+                        max_y = y;
+                        not_air = true;
+                    },
+                }
+            }
+            if not_air {
+                let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + max_y as i32) as f64;
+                if block_height < 42.0 {
+                    blocks[x + max_y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Sand;
+                } else {
+                    blocks[x + max_y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Grass;
+                    if max_y >= 2 {
+                        blocks[x + (max_y-1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Dirt;
+                        blocks[x + (max_y-2)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Dirt;
+                    } else if max_y >= 1 {
+                        blocks[x + (max_y-1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Dirt;
+                    }
+                }
+            }
         }
     }
 
