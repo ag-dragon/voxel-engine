@@ -86,7 +86,12 @@ fn main() {
                         }
 
                         mouse_position = *position;
-                    }
+                    },
+                    WindowEvent::MouseInput {
+                        state,
+                        button,
+                        ..
+                    } => input.update_mouse_button(*button, *state),
                     _ => {}
                 }
             }
