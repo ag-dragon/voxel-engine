@@ -128,6 +128,11 @@ impl Chunk {
     }
 
     #[inline]
+    pub fn set_block(&mut self, new_block: BlockType, x: usize, y: usize, z: usize) {
+        self.blocks[x + CHUNK_SIZE*y + CHUNK_SIZE*CHUNK_SIZE*z] = new_block;
+    }
+
+    #[inline]
     pub fn get_block_border(&self, neighbors: &[Chunk], x: i32, y: i32, z: i32) -> BlockType {
         let mut nx = 1;
         let mut ny = 1;
