@@ -205,8 +205,9 @@ pub struct Terrain {
     loading: Vec<Point3<i32>>,
     unload_todo: Vec<Point3<i32>>,
     meshed_chunks: HashMap<Point3<i32>, Mesh>,
+    meshing_tx: mpsc::Sender<(Point3<i32>, CMesh)>,
+    meshing_rx: mpsc::Receiver<(Point3<i32>, CMesh)>,
     meshes_todo: VecDeque<Point3<i32>>,
-    meshes_completed: Arc<Mutex<Vec<(Point3<i32>, CMesh)>>>,
 }
 
 impl Terrain {
@@ -219,9 +220,8 @@ impl Terrain {
         let loading: Vec<Point3<i32>> = Vec::new();
         let unload_todo: Vec<Point3<i32>> = Vec::new();
         let meshed_chunks: HashMap<Point3<i32>, Mesh> = HashMap::new();
+        let (meshing_tx, meshing_rx) = mpsc::channel();
         let meshes_todo: VecDeque<Point3<i32>> = VecDeque::new();
-        let meshes_completed: Arc<Mutex<Vec<(Point3<i32>, CMesh)>>>
-            = Arc::new(Mutex::new(Vec::new()));
 
         Self {
             thread_pool,
@@ -233,8 +233,9 @@ impl Terrain {
             loading,
             unload_todo,
             meshed_chunks,
+            meshing_tx,
+                meshing_rx,
             meshes_todo,
-            meshes_completed,
         }
     }
 
@@ -377,41 +378,36 @@ impl Terrain {
             }
         }
 
-        //let mut assigned_meshes: Vec<Point3<i32>> = Vec::new();
         'workers: for _ in 0..10 {
             if let Some(chunk) = self.meshes_todo.pop_front() {
-            //'workers: for chunk in &self.meshes_todo {
-                    let tchunk = chunk.clone();
-                    let chunk_data = (*self.chunk_map.get(&chunk).unwrap()).clone();
-                    let mut neighbor_chunks = Vec::new();
-                    for z in -1..=1 {
-                        for y in -1..=1 {
-                            for x in -1..=1 {
-                                match self.chunk_map.get(&point![
-                                    chunk.x+x, chunk.y+y, chunk.z+z
-                                ]) {
-                                    Some(chunk) => neighbor_chunks.push((*chunk).clone()),
-                                    None => {
-                                        self.meshes_todo.push_back(chunk);
-                                        continue 'workers;
-                                    },
-                                }
+                let tchunk = chunk.clone();
+                let chunk_data = (*self.chunk_map.get(&chunk).unwrap()).clone();
+                let mut neighbor_chunks = Vec::new();
+                for z in -1..=1 {
+                    for y in -1..=1 {
+                        for x in -1..=1 {
+                            match self.chunk_map.get(&point![
+                                chunk.x+x, chunk.y+y, chunk.z+z
+                            ]) {
+                                Some(chunk) => neighbor_chunks.push((*chunk).clone()),
+                                None => {
+                                    self.meshes_todo.push_back(chunk);
+                                    continue 'workers;
+                                },
                             }
                         }
                     }
-                    let completed_meshes = Arc::clone(&self.meshes_completed);
-                    
-                    self.thread_pool.spawn(move || {
-                        let output_mesh = mesh_chunk(tchunk, chunk_data, &neighbor_chunks[..]);
-                        completed_meshes.lock().unwrap().push((tchunk, output_mesh));
-                    });
-                //assigned_meshes.push(*chunk);
+                }
+                let meshing_tx = self.meshing_tx.clone();
+                
+                self.thread_pool.spawn(move || {
+                    let _ = meshing_tx.send((tchunk, mesh_chunk(tchunk, chunk_data, &neighbor_chunks[..])));
+                });
             }
-            //self.meshes_todo.retain(|chunk| !assigned_meshes.contains(chunk));
         }
 
-        let mut cm = self.meshes_completed.lock().unwrap();
-        for (chunk, mesh) in cm.drain(..) {
+        let completed_meshes: Vec<(Point3<i32>, CMesh)> = self.meshing_rx.try_iter().collect();
+        for (chunk, mesh) in completed_meshes {
             if self.chunk_map.contains_key(&chunk) {
                 self.meshed_chunks.insert(chunk, Mesh::new(device, &mesh));
             }
