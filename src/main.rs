@@ -41,6 +41,7 @@ fn main() {
         f32::to_radians(90.0), 0.1, 1000.0);
     let mut player = player::Player::new(Point3::new(0.0, 64.0, 0.0), 20.0, 60.0);
 
+    let thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     let mut terrain = terrain::Terrain::new();
     let mut terrain_mesh = terrain::TerrainMesh::new();
 
@@ -109,8 +110,8 @@ fn main() {
                     f32::floor(player.position[2] / chunk::CHUNK_SIZE as f32) as i32,
                 ];
 
-                let terrain_changes = terrain.update(player_chunk_pos, &gpu.device);
-                terrain_mesh.update(&terrain_changes, &terrain, player_chunk_pos, &gpu.device);
+                let terrain_changes = terrain.update(player_chunk_pos, &gpu.device, &thread_pool);
+                terrain_mesh.update(&terrain_changes, &terrain, player_chunk_pos, &gpu.device, &thread_pool);
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
                 

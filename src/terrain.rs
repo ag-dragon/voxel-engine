@@ -203,7 +203,6 @@ pub struct TerrainChanges {
 }
 
 pub struct Terrain {
-    thread_pool: ThreadPool,
     player_chunk: Point3<i32>,
     chunk_map: HashMap<Point3<i32>, Chunk>,
     loading_tx: mpsc::Sender<(Point3<i32>, Chunk)>, // for cloning and handing to worker threads
@@ -215,7 +214,6 @@ pub struct Terrain {
 
 impl Terrain {
     pub fn new() -> Self {
-        let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
         let player_chunk = point![0, 0, 0];
         let chunk_map: HashMap<Point3<i32>, Chunk> = HashMap::new();
         let (loading_tx, loading_rx) = mpsc::channel();
@@ -224,7 +222,6 @@ impl Terrain {
         let unload_todo: Vec<Point3<i32>> = Vec::new();
 
         Self {
-            thread_pool,
             player_chunk,
             chunk_map,
             loading_tx,
@@ -305,7 +302,7 @@ impl Terrain {
     // loads new chunk from queue
     // spawns new tasks for worker threads from mesh todo list
     // sends completed meshes to gpu and adds to meshed chunks map
-    pub fn update(&mut self, player_pos: Point3<i32>, device: &wgpu::Device) -> TerrainChanges {
+    pub fn update(&mut self, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
         let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
         let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
         let mut modified_chunks: Vec<Point3<i32>> = Vec::new();
@@ -320,7 +317,7 @@ impl Terrain {
         for chunk in self.load_todo.drain(..) {
             let tchunk = chunk.clone();
             let loading_tx = self.loading_tx.clone();
-            self.thread_pool.spawn(move || {
+            thread_pool.spawn(move || {
                 let _ = loading_tx.send((tchunk, gen_chunk(tchunk)));
             });
             self.loading.push(chunk);
@@ -349,7 +346,6 @@ impl Terrain {
 }
 
 pub struct TerrainMesh {
-    thread_pool: ThreadPool,
     player_chunk: Point3<i32>,
     meshed_chunks: HashMap<Point3<i32>, Mesh>,
     meshing_tx: mpsc::Sender<(Point3<i32>, CMesh)>,
@@ -359,14 +355,12 @@ pub struct TerrainMesh {
 
 impl TerrainMesh {
     pub fn new() -> Self {
-        let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
         let player_chunk = point![0, 0, 0];
         let meshed_chunks: HashMap<Point3<i32>, Mesh> = HashMap::new();
         let (meshing_tx, meshing_rx) = mpsc::channel();
         let meshes_todo: VecDeque<Point3<i32>> = VecDeque::new();
 
         Self {
-            thread_pool,
             player_chunk,
             meshed_chunks,
             meshing_tx,
@@ -421,7 +415,7 @@ impl TerrainMesh {
         render_meshes
     }
 
-    pub fn update(&mut self, terrain_changes: &TerrainChanges, terrain_data: &Terrain, player_pos: Point3<i32>, device: &wgpu::Device) {
+    pub fn update(&mut self, terrain_changes: &TerrainChanges, terrain_data: &Terrain, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) {
         self.player_chunk = player_pos;
 
         for chunk in &terrain_changes.loaded_chunks {
@@ -432,6 +426,9 @@ impl TerrainMesh {
             self.remove_chunk(*chunk);
         }
 
+        // TODO: maybe, limit to one per frame? after the first couple its not very important to do
+        // it all at once, cause the threads will be busy anyways
+        // also this whole section is just very messy
         'workers: for _ in 0..10 {
             if let Some(chunk) = self.meshes_todo.pop_front() {
                 let tchunk = chunk.clone();
@@ -454,12 +451,13 @@ impl TerrainMesh {
                 }
                 let meshing_tx = self.meshing_tx.clone();
                 
-                self.thread_pool.spawn(move || {
+                thread_pool.spawn(move || {
                     let _ = meshing_tx.send((tchunk, mesh_chunk(tchunk, chunk_data, &neighbor_chunks[..])));
                 });
             }
         }
 
+        // TODO: limit this to a certain number per second based on delta time, similar to veloren
         let completed_meshes: Vec<(Point3<i32>, CMesh)> = self.meshing_rx.try_iter().collect();
         for (chunk, mesh) in completed_meshes {
             if terrain_data.chunk_map.contains_key(&chunk) {
