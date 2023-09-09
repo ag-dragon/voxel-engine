@@ -42,6 +42,7 @@ fn main() {
     let mut player = player::Player::new(Point3::new(0.0, 64.0, 0.0), 20.0, 60.0);
 
     let mut terrain = terrain::Terrain::new();
+    let mut terrain_mesh = terrain::TerrainMesh::new();
 
     let mut last_render_time = std::time::Instant::now();
     let mut mouse_position = PhysicalPosition::new(-1.0, -1.0);
@@ -108,11 +109,12 @@ fn main() {
                     f32::floor(player.position[2] / chunk::CHUNK_SIZE as f32) as i32,
                 ];
 
-                terrain.update(player_chunk_pos, &gpu.device);
+                let terrain_changes = terrain.update(player_chunk_pos, &gpu.device);
+                terrain_mesh.update(&terrain_changes, &terrain, player_chunk_pos, &gpu.device);
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
                 
-                match renderer.render(&gpu, &camera, &terrain.get_meshes()[..]) {
+                match renderer.render(&gpu, &camera, &terrain_mesh.get_meshes()[..]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     Err(e) => eprintln!("{:?}", e),
