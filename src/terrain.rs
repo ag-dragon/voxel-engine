@@ -5,7 +5,7 @@ use rayon::ThreadPool;
 use noise::{NoiseFn, Perlin, Curve};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Mutex, Arc},
+    sync::{mpsc, Mutex, Arc},
 };
 
 const RENDER_DISTANCE: i32 = 8;
@@ -199,9 +199,10 @@ pub struct Terrain {
     thread_pool: ThreadPool,
     player_chunk: Point3<i32>,
     chunk_map: HashMap<Point3<i32>, Chunk>,
+    loading_tx: mpsc::Sender<(Point3<i32>, Chunk)>, // for cloning and handing to worker threads
+    loading_rx: mpsc::Receiver<(Point3<i32>, Chunk)>,
     load_todo: Vec<Point3<i32>>,
     loading: Vec<Point3<i32>>,
-    loaded_chunks: Arc<Mutex<Vec<(Point3<i32>, Chunk)>>>,
     unload_todo: Vec<Point3<i32>>,
     meshed_chunks: HashMap<Point3<i32>, Mesh>,
     meshes_todo: VecDeque<Point3<i32>>,
@@ -213,10 +214,9 @@ impl Terrain {
         let thread_pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
         let player_chunk = point![0, 0, 0];
         let chunk_map: HashMap<Point3<i32>, Chunk> = HashMap::new();
+        let (loading_tx, loading_rx) = mpsc::channel();
         let load_todo: Vec<Point3<i32>> = Vec::new();
         let loading: Vec<Point3<i32>> = Vec::new();
-        let loaded_chunks: Arc<Mutex<Vec<(Point3<i32>, Chunk)>>>
-            = Arc::new(Mutex::new(Vec::new()));
         let unload_todo: Vec<Point3<i32>> = Vec::new();
         let meshed_chunks: HashMap<Point3<i32>, Mesh> = HashMap::new();
         let meshes_todo: VecDeque<Point3<i32>> = VecDeque::new();
@@ -227,9 +227,10 @@ impl Terrain {
             thread_pool,
             player_chunk,
             chunk_map,
+            loading_tx,
+            loading_rx,
             load_todo,
             loading,
-            loaded_chunks,
             unload_todo,
             meshed_chunks,
             meshes_todo,
@@ -357,21 +358,15 @@ impl Terrain {
 
         for chunk in self.load_todo.drain(..) {
             let tchunk = chunk.clone();
-            let loaded_chunks = Arc::clone(&self.loaded_chunks);
+            let loading_tx = self.loading_tx.clone();
             self.thread_pool.spawn(move || {
-                let output_chunk = gen_chunk(tchunk);
-                loaded_chunks.lock().unwrap().push((tchunk, output_chunk));
+                let _ = loading_tx.send((tchunk, gen_chunk(tchunk)));
             });
             self.loading.push(chunk);
         }
 
-        let mut lc = self.loaded_chunks.lock().unwrap();
-        let mut to_add = Vec::new();
-        for (pos, chunk) in lc.drain(..) {
-            to_add.push((pos, chunk));
-        }
-        drop(lc);
-        for (pos, chunk) in to_add.drain(..) {
+        let to_add: Vec<(Point3<i32>, Chunk)> = self.loading_rx.try_iter().collect();
+        for (pos, chunk) in to_add {
             self.add_chunk(pos, chunk);
             self.loading.retain(|c| *c != pos);
         }
