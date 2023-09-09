@@ -6,6 +6,7 @@ mod input;
 mod camera;
 mod player;
 mod chunk;
+mod block;
 mod terrain;
 use gpu_state::GpuState;
 

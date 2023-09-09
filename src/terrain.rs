@@ -1,4 +1,5 @@
-use crate::chunk::{Chunk, CHUNK_SIZE, BlockType, BlockFace};
+use crate::block::{BlockType, BlockFace};
+use crate::chunk::{Chunk, CHUNK_SIZE};
 use crate::mesh::{Mesh, CMesh, MeshVertex};
 use nalgebra::{Point3, point};
 use rayon::ThreadPool;
