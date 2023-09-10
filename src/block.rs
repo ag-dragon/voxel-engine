@@ -1,7 +1,7 @@
 use crate::mesh::MeshVertex;
 use std::slice::Iter;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlockType {
     Air,
     Grass,

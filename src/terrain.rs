@@ -6,13 +6,19 @@ use rayon::ThreadPool;
 use noise::{NoiseFn, Perlin, Curve};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{mpsc, Mutex, Arc},
+    sync::mpsc,
 };
 
 const RENDER_DISTANCE: i32 = 8;
 
+pub struct ChunkGenResponse {
+    position: Point3<i32>,
+    chunk: Chunk,
+    is_empty: bool,
+}
+
 // function used by worker threads
-pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
+pub fn gen_chunk(chunk_pos: Point3<i32>) -> ChunkGenResponse {
     let perlin = Perlin::new(134);
     let mut continental_noise: Curve<f64, Perlin, 2> = Curve::new(perlin);
     continental_noise = continental_noise.add_control_point(-1.01, 50.0);
@@ -99,7 +105,168 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> Chunk {
     }
 
     chunk.set(blocks);
-    chunk
+    ChunkGenResponse {
+        position: chunk_pos,
+        chunk,
+        is_empty: !blocks.into_iter().any(|b| b != BlockType::Air),
+    }
+}
+
+pub struct TerrainChanges {
+    loaded_chunks: Vec<Point3<i32>>,
+    unloaded_chunks: Vec<Point3<i32>>,
+    modified_chunks: Vec<Point3<i32>>,
+}
+
+pub struct ChunkData {
+    chunk: Chunk,
+    is_empty: bool,
+}
+
+pub struct Terrain {
+    player_chunk: Point3<i32>,
+    chunk_map: HashMap<Point3<i32>, ChunkData>,
+    loading_tx: mpsc::Sender<ChunkGenResponse>, // for cloning and handing to worker threads
+    loading_rx: mpsc::Receiver<ChunkGenResponse>,
+    load_todo: Vec<Point3<i32>>,
+    loading: Vec<Point3<i32>>,
+    unload_todo: Vec<Point3<i32>>,
+}
+
+impl Terrain {
+    pub fn new() -> Self {
+        let player_chunk = point![0, 0, 0];
+        let chunk_map: HashMap<Point3<i32>, ChunkData> = HashMap::new();
+        let (loading_tx, loading_rx) = mpsc::channel();
+        let load_todo: Vec<Point3<i32>> = Vec::new();
+        let loading: Vec<Point3<i32>> = Vec::new();
+        let unload_todo: Vec<Point3<i32>> = Vec::new();
+
+        Self {
+            player_chunk,
+            chunk_map,
+            loading_tx,
+            loading_rx,
+            load_todo,
+            loading,
+            unload_todo,
+        }
+    }
+
+    pub fn check_neighbors(&self, chunk_pos: Point3<i32>) -> bool {
+        let mut result = true;
+        for x in -1..=1 {
+            for y in -1..=1 {
+                for z in -1..=1 {
+                    if !self.chunk_map.contains_key(&point![
+                        chunk_pos.x + x,
+                        chunk_pos.y + y,
+                        chunk_pos.z + z,
+                    ]) {
+                        result = false;
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    pub fn add_chunk(&mut self, chunk_pos: Point3<i32>, chunk: ChunkData) {
+        if let Some(_) = self.chunk_map.insert(chunk_pos, chunk) {
+            // we just overwrote another chunk, no reason this should be able to happen currently
+            eprintln!["uh oh, a chunk was overwritten by another"];
+        }
+
+    }
+
+    // unload chunk
+    pub fn remove_chunk(&mut self, chunk_pos: Point3<i32>) {
+        self.chunk_map.remove(&chunk_pos);
+        self.load_todo.retain(|chunk| *chunk != chunk_pos);
+    }
+
+    // upon entering new chunk, add list of new chunks to load todo
+    pub fn load_chunks(&mut self, chunk_pos: Point3<i32>) {
+        for x in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
+            for y in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
+                for z in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1{
+                    let cpos = point![
+                        chunk_pos.x + x,
+                        chunk_pos.y + y,
+                        chunk_pos.z + z,
+                    ];
+                    if !self.chunk_map.contains_key(&cpos)
+                    && !self.load_todo.contains(&cpos) 
+                    && !self.loading.contains(&cpos) {
+                        self.load_todo.push(cpos);
+                    }
+                }
+            }
+        }
+    }
+
+    // upon entering new chunk, remove all chunks that are too far from player
+    pub fn unload_chunks(&mut self, chunk_pos: Point3<i32>) {
+        let mut unload_chunks: Vec<Point3<i32>> = self.chunk_map.keys().cloned().collect();
+        unload_chunks.retain(|cpos| {
+            (cpos.x - chunk_pos.x).abs() > RENDER_DISTANCE+1
+            || (cpos.y - chunk_pos.y).abs() > RENDER_DISTANCE+1
+            || (cpos.z - chunk_pos.z).abs() > RENDER_DISTANCE+1
+        });
+
+        for chunk in unload_chunks {
+            self.unload_todo.push(chunk);
+        }
+    }
+
+    // checks if player enters new chunk
+    // loads new chunk from queue
+    // spawns new tasks for worker threads from mesh todo list
+    // sends completed meshes to gpu and adds to meshed chunks map
+    pub fn update(&mut self, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
+        let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
+        let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
+        let mut modified_chunks: Vec<Point3<i32>> = Vec::new();
+
+        if player_pos != self.player_chunk ||
+            (self.chunk_map.is_empty() && self.load_todo.is_empty() && self.loading.is_empty()) {
+            self.load_chunks(player_pos);
+            self.unload_chunks(player_pos);
+            self.player_chunk = player_pos;
+        }
+
+        for chunk in self.load_todo.drain(..) {
+            let tchunk = chunk.clone();
+            let loading_tx = self.loading_tx.clone();
+            thread_pool.spawn(move || {
+                let _ = loading_tx.send(gen_chunk(tchunk));
+            });
+            self.loading.push(chunk);
+        }
+
+        let to_add: Vec<ChunkGenResponse> = self.loading_rx.try_iter().collect();
+        for response in to_add {
+            self.add_chunk(response.position, ChunkData {
+                chunk: response.chunk,
+                is_empty: response.is_empty,
+            });
+            self.loading.retain(|c| *c != response.position);
+            loaded_chunks.push(response.position);
+        }
+
+        for _ in 0..10 {
+            if let Some(chunk) = self.unload_todo.pop() {
+                self.remove_chunk(chunk);
+                unloaded_chunks.push(chunk);
+            }
+        }
+
+        TerrainChanges {
+            loaded_chunks,
+            unloaded_chunks,
+            modified_chunks,
+        }
+    }
 }
 
 // function used by worker threads
@@ -196,155 +363,6 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
     CMesh::new(&chunk_vertices, &chunk_indices)
 }
 
-pub struct TerrainChanges {
-    loaded_chunks: Vec<Point3<i32>>,
-    unloaded_chunks: Vec<Point3<i32>>,
-    modified_chunks: Vec<Point3<i32>>,
-}
-
-pub struct Terrain {
-    player_chunk: Point3<i32>,
-    chunk_map: HashMap<Point3<i32>, Chunk>,
-    loading_tx: mpsc::Sender<(Point3<i32>, Chunk)>, // for cloning and handing to worker threads
-    loading_rx: mpsc::Receiver<(Point3<i32>, Chunk)>,
-    load_todo: Vec<Point3<i32>>,
-    loading: Vec<Point3<i32>>,
-    unload_todo: Vec<Point3<i32>>,
-}
-
-impl Terrain {
-    pub fn new() -> Self {
-        let player_chunk = point![0, 0, 0];
-        let chunk_map: HashMap<Point3<i32>, Chunk> = HashMap::new();
-        let (loading_tx, loading_rx) = mpsc::channel();
-        let load_todo: Vec<Point3<i32>> = Vec::new();
-        let loading: Vec<Point3<i32>> = Vec::new();
-        let unload_todo: Vec<Point3<i32>> = Vec::new();
-
-        Self {
-            player_chunk,
-            chunk_map,
-            loading_tx,
-            loading_rx,
-            load_todo,
-            loading,
-            unload_todo,
-        }
-    }
-
-    pub fn check_neighbors(&self, chunk_pos: Point3<i32>) -> bool {
-        let mut result = true;
-        for x in -1..=1 {
-            for y in -1..=1 {
-                for z in -1..=1 {
-                    if !self.chunk_map.contains_key(&point![
-                        chunk_pos.x + x,
-                        chunk_pos.y + y,
-                        chunk_pos.z + z,
-                    ]) {
-                        result = false;
-                    }
-                }
-            }
-        }
-        result
-    }
-
-    pub fn add_chunk(&mut self, chunk_pos: Point3<i32>, chunk: Chunk) {
-        if let Some(_) = self.chunk_map.insert(chunk_pos, chunk) {
-            // we just overwrote another chunk, no reason this should be able to happen currently
-            eprintln!["uh oh, a chunk was overwritten by another"];
-        }
-
-    }
-
-    // unload chunk
-    pub fn remove_chunk(&mut self, chunk_pos: Point3<i32>) {
-        self.chunk_map.remove(&chunk_pos);
-        self.load_todo.retain(|chunk| *chunk != chunk_pos);
-    }
-
-    // upon entering new chunk, add list of new chunks to load todo
-    pub fn load_chunks(&mut self, chunk_pos: Point3<i32>) {
-        for x in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
-            for y in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
-                for z in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1{
-                    let cpos = point![
-                        chunk_pos.x + x,
-                        chunk_pos.y + y,
-                        chunk_pos.z + z,
-                    ];
-                    if !self.chunk_map.contains_key(&cpos)
-                    && !self.load_todo.contains(&cpos) 
-                    && !self.loading.contains(&cpos) {
-                        self.load_todo.push(cpos);
-                    }
-                }
-            }
-        }
-    }
-
-    // upon entering new chunk, remove all chunks that are too far from player
-    pub fn unload_chunks(&mut self, chunk_pos: Point3<i32>) {
-        let mut unload_chunks: Vec<Point3<i32>> = self.chunk_map.keys().cloned().collect();
-        unload_chunks.retain(|cpos| {
-            (cpos.x - chunk_pos.x).abs() > RENDER_DISTANCE+1
-            || (cpos.y - chunk_pos.y).abs() > RENDER_DISTANCE+1
-            || (cpos.z - chunk_pos.z).abs() > RENDER_DISTANCE+1
-        });
-
-        for chunk in unload_chunks {
-            self.unload_todo.push(chunk);
-        }
-    }
-
-    // checks if player enters new chunk
-    // loads new chunk from queue
-    // spawns new tasks for worker threads from mesh todo list
-    // sends completed meshes to gpu and adds to meshed chunks map
-    pub fn update(&mut self, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
-        let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut modified_chunks: Vec<Point3<i32>> = Vec::new();
-
-        if player_pos != self.player_chunk ||
-            (self.chunk_map.is_empty() && self.load_todo.is_empty() && self.loading.is_empty()) {
-            self.load_chunks(player_pos);
-            self.unload_chunks(player_pos);
-            self.player_chunk = player_pos;
-        }
-
-        for chunk in self.load_todo.drain(..) {
-            let tchunk = chunk.clone();
-            let loading_tx = self.loading_tx.clone();
-            thread_pool.spawn(move || {
-                let _ = loading_tx.send((tchunk, gen_chunk(tchunk)));
-            });
-            self.loading.push(chunk);
-        }
-
-        let to_add: Vec<(Point3<i32>, Chunk)> = self.loading_rx.try_iter().collect();
-        for (pos, chunk) in to_add {
-            self.add_chunk(pos, chunk);
-            self.loading.retain(|c| *c != pos);
-            loaded_chunks.push(pos);
-        }
-
-        for _ in 0..10 {
-            if let Some(chunk) = self.unload_todo.pop() {
-                self.remove_chunk(chunk);
-                unloaded_chunks.push(chunk);
-            }
-        }
-
-        TerrainChanges {
-            loaded_chunks,
-            unloaded_chunks,
-            modified_chunks,
-        }
-    }
-}
-
 pub struct TerrainMesh {
     player_chunk: Point3<i32>,
     meshed_chunks: HashMap<Point3<i32>, Mesh>,
@@ -412,13 +430,14 @@ impl TerrainMesh {
 
         let s = self.meshes_todo.len();
         for chunk in &terrain_changes.loaded_chunks {
-            if terrain_data.check_neighbors(*chunk) {
+            if !terrain_data.chunk_map.get(chunk).unwrap().is_empty && terrain_data.check_neighbors(*chunk) {
                 if (chunk.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
                 && (chunk.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
                 && (chunk.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
                     self.meshes_todo.push_back(*chunk);
                 }
             }
+
             for x in -1..=1 {
                 for y in -1..=1 {
                     for z in -1..=1 {
@@ -429,8 +448,8 @@ impl TerrainMesh {
                         ];
                         if !self.meshes_todo.contains(&n_pos) {
                             match terrain_data.chunk_map.get(&n_pos) {
-                                Some(_) => {
-                                    if terrain_data.check_neighbors(n_pos) {
+                                Some(n_data) => {
+                                    if !n_data.is_empty && terrain_data.check_neighbors(n_pos) {
                                         if (n_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
                                         && (n_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
                                         && (n_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
@@ -452,7 +471,7 @@ impl TerrainMesh {
         'workers: for _ in 0..10 {
             if let Some(chunk) = self.meshes_todo.pop_front() {
                 let tchunk = chunk.clone();
-                let chunk_data = (*terrain_data.chunk_map.get(&chunk).unwrap()).clone();
+                let chunk_data = (*terrain_data.chunk_map.get(&chunk).unwrap()).chunk.clone();
                 let mut neighbor_chunks = Vec::new();
                 for z in -1..=1 {
                     for y in -1..=1 {
@@ -460,7 +479,7 @@ impl TerrainMesh {
                             match terrain_data.chunk_map.get(&point![
                                 chunk.x+x, chunk.y+y, chunk.z+z
                             ]) {
-                                Some(chunk) => neighbor_chunks.push((*chunk).clone()),
+                                Some(nchunk) => neighbor_chunks.push((*nchunk).chunk.clone()),
                                 None => {
                                     self.meshes_todo.push_back(chunk);
                                     continue 'workers;
