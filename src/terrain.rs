@@ -399,9 +399,9 @@ impl TerrainMesh {
                     for z in -1..=1 {
                         if x != 0 || y != 0 || z != 0 {
                             let n_pos = point![
-                                player_pos.x + x,
-                                player_pos.y + y,
-                                player_pos.z + z,
+                                chunk.x + x,
+                                chunk.y + y,
+                                chunk.z + z,
                             ];
                             self.meshes_todo.retain(|chunk| *chunk != n_pos);
                         }
