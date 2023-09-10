@@ -43,7 +43,7 @@ fn main() {
         Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
         f32::to_radians(90.0), 0.1, 1000.0);
-    let mut player = player::Player::new(Point3::new(0.0, 64.0, 0.0), 20.0, 60.0);
+    let mut player = player::Player::new(Point3::new(0.0, 64.0, 0.0), 10.0, 60.0);
 
     let thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     let mut terrain = terrain::Terrain::new();

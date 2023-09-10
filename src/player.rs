@@ -84,9 +84,9 @@ impl Player {
         }
 
         self.chunk_position = point![
-            f32::floor(self.position[0] / chunk::CHUNK_SIZE as f32) as i32,
-            f32::floor(self.position[1] / chunk::CHUNK_SIZE as f32) as i32,
-            f32::floor(self.position[2] / chunk::CHUNK_SIZE as f32) as i32,
+            f32::floor((self.position[0]-0.5) / chunk::CHUNK_SIZE as f32) as i32,
+            f32::floor((self.position[1]-0.5) / chunk::CHUNK_SIZE as f32) as i32,
+            f32::floor((self.position[2]-0.5) / chunk::CHUNK_SIZE as f32) as i32,
         ];
 
         let mut terrain_changes = TerrainChanges::new();
@@ -101,49 +101,24 @@ impl Player {
                 let mut new_blocks: Vec<(Point3<usize>, BlockType)> = Vec::new();
                 for t in 0..5 {
                     let block_world_pos = point![
-                        (dir.x * t as f32 + self.position.x) as i32,
-                        (dir.y * t as f32 + self.position.y) as i32,
-                        (dir.z * t as f32 + self.position.z) as i32,
+                        (dir.x * t as f32 + self.position.x).round() as i32,
+                        (dir.y * t as f32 + self.position.y).round() as i32,
+                        (dir.z * t as f32 + self.position.z).round() as i32,
+                    ];
+                    let c_pos = point![
+                        f32::floor(block_world_pos.x as f32 / chunk::CHUNK_SIZE as f32) as i32,
+                        f32::floor(block_world_pos.y as f32 / chunk::CHUNK_SIZE as f32) as i32,
+                        f32::floor(block_world_pos.z as f32 / chunk::CHUNK_SIZE as f32) as i32,
                     ];
                     if let Some((block_pos, block)) = terrain.get_block(block_world_pos) {
                         if block != BlockType::Air {
-                            new_blocks.push((block_pos, BlockType::Air));
+                            terrain_changes.modified_chunks.entry(c_pos)
+                                .and_modify(|blocks| blocks.push((block_pos, BlockType::Air)))
+                                .or_insert([(block_pos, BlockType::Air)].to_vec());
                             break;
                         }
                     }
                 }
-                terrain_changes.modified_chunks.insert(self.chunk_position, new_blocks);
-                /*
-                if let Some(current_chunk) = terrain.get_chunk(self.chunk_position) {
-                    if !current_chunk.is_empty {
-                        let mut new_blocks = Vec::new();
-                        for x in 0..chunk::CHUNK_SIZE {
-                            for y in 0..chunk::CHUNK_SIZE {
-                                for z in 0..chunk::CHUNK_SIZE {
-                                    new_blocks.push((point![x, y, z], BlockType::Air));
-                                }
-                            }
-                        }
-                        terrain_changes.modified_chunks.insert(self.chunk_position, new_blocks);
-                    }
-                }
-                let dir = Vector3::new(
-                    camera.yaw.cos()*camera.pitch.cos(),
-                    camera.pitch.sin(),
-                    camera.yaw.sin()*camera.pitch.cos(),
-                ).normalize();
-                match terrain.chunk_map.get_mut(&player_chunk_pos) {
-                    Some(pchunk) => {
-                        pchunk.set_block(BlockType::Air,
-                            (self.position.x % chunk::CHUNK_SIZE as f32) as usize,
-                            (self.position.y % chunk::CHUNK_SIZE as f32) as usize,
-                            (self.position.z % chunk::CHUNK_SIZE as f32) as usize,
-                        );
-                        terrain.meshes_todo.push_back(player_chunk_pos);
-                    },
-                    None => {},
-                }
-                */
             }
         } else {
             self.mouse_p = false;
