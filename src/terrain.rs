@@ -369,36 +369,9 @@ impl TerrainMesh {
         }
     }
 
-    pub fn insert_chunk(&mut self, chunk_pos: Point3<i32>, terrain_data: &Terrain) {
-        if terrain_data.check_neighbors(chunk_pos) {
-            if (chunk_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
-            && (chunk_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
-            && (chunk_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
-                self.meshes_todo.push_back(chunk_pos);
-            }
-        }
-        for x in -1..=1 {
-            for y in -1..=1 {
-                for z in -1..=1 {
-                    let n_pos = point![
-                        chunk_pos.x + x,
-                        chunk_pos.y + y,
-                        chunk_pos.z + z,
-                    ];
-                    match terrain_data.chunk_map.get(&n_pos) {
-                        Some(_) => {
-                            if terrain_data.check_neighbors(n_pos) {
-                                if (n_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
-                                && (n_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
-                                && (n_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
-                                    self.meshes_todo.push_back(n_pos);
-                                }
-                            }
-                        },
-                        None => {},
-                    }
-                }
-            }
+    pub fn insert_chunk(&mut self, chunk_pos: Point3<i32>, mesh: Mesh) {
+        if let Some(_) = self.meshed_chunks.insert(chunk_pos, mesh) {
+            // old mesh rewritten. If I add metadata for meshes, delete it here
         }
     }
 
@@ -418,12 +391,56 @@ impl TerrainMesh {
     pub fn update(&mut self, terrain_changes: &TerrainChanges, terrain_data: &Terrain, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) {
         self.player_chunk = player_pos;
 
-        for chunk in &terrain_changes.loaded_chunks {
-            self.insert_chunk(*chunk, terrain_data);
-        }
-
         for chunk in &terrain_changes.unloaded_chunks {
             self.remove_chunk(*chunk);
+
+            for x in -1..=1 {
+                for y in -1..=1 {
+                    for z in -1..=1 {
+                        if x != 0 || y != 0 || z != 0 {
+                            let n_pos = point![
+                                player_pos.x + x,
+                                player_pos.y + y,
+                                player_pos.z + z,
+                            ];
+                            self.meshes_todo.retain(|chunk| *chunk != n_pos);
+                        }
+                    }
+                }
+            }
+        }
+
+        for chunk in &terrain_changes.loaded_chunks {
+            if terrain_data.check_neighbors(*chunk) {
+                if (chunk.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
+                && (chunk.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
+                && (chunk.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
+                    self.meshes_todo.push_back(*chunk);
+                }
+            }
+            for x in -1..=1 {
+                for y in -1..=1 {
+                    for z in -1..=1 {
+                        let n_pos = point![
+                            chunk.x + x,
+                            chunk.y + y,
+                            chunk.z + z,
+                        ];
+                        match terrain_data.chunk_map.get(&n_pos) {
+                            Some(_) => {
+                                if terrain_data.check_neighbors(n_pos) {
+                                    if (n_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
+                                    && (n_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
+                                    && (n_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
+                                        self.meshes_todo.push_back(n_pos);
+                                    }
+                                }
+                            },
+                            None => {},
+                        }
+                    }
+                }
+            }
         }
 
         // TODO: maybe, limit to one per frame? after the first couple its not very important to do
@@ -461,7 +478,7 @@ impl TerrainMesh {
         let completed_meshes: Vec<(Point3<i32>, CMesh)> = self.meshing_rx.try_iter().collect();
         for (chunk, mesh) in completed_meshes {
             if terrain_data.chunk_map.contains_key(&chunk) {
-                self.meshed_chunks.insert(chunk, Mesh::new(device, &mesh));
+                self.insert_chunk(chunk, Mesh::new(device, &mesh));
             }
         }
     }
