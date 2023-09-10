@@ -171,6 +171,27 @@ impl Terrain {
         self.chunk_map.get(&chunk_pos)
     }
 
+    pub fn get_block(&self, block_world_pos: Point3<i32>) -> Option<(Point3<usize>, BlockType)> {
+        let block_pos = point![
+            ((block_world_pos.x % CHUNK_SIZE as i32) + CHUNK_SIZE as i32) % CHUNK_SIZE as i32,
+            ((block_world_pos.y % CHUNK_SIZE as i32) + CHUNK_SIZE as i32) % CHUNK_SIZE as i32,
+            ((block_world_pos.z % CHUNK_SIZE as i32) + CHUNK_SIZE as i32) % CHUNK_SIZE as i32,
+        ];
+        let chunk_pos = point![
+            (block_world_pos.x - block_pos.x) / CHUNK_SIZE as i32,
+            (block_world_pos.y - block_pos.y) / CHUNK_SIZE as i32,
+            (block_world_pos.z - block_pos.z) / CHUNK_SIZE as i32,
+        ];
+        if let Some(chunk_data) = self.get_chunk(chunk_pos) {
+            Some((
+                point![block_pos.x as usize, block_pos.y as usize, block_pos.z as usize],
+                chunk_data.chunk.get_block(block_pos.x as usize, block_pos.y as usize, block_pos.z as usize),
+            ))
+        } else {
+            None
+        }
+    }
+
     pub fn check_neighbors(&self, chunk_pos: Point3<i32>) -> bool {
         let mut result = true;
         for x in -1..=1 {

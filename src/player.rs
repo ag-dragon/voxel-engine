@@ -93,6 +93,27 @@ impl Player {
         if input.mouse_pressed(event::MouseButton::Left) {
             if !self.mouse_p {
                 self.mouse_p = true;
+                let dir = Vector3::new(
+                    camera.yaw.cos()*camera.pitch.cos(),
+                    camera.pitch.sin(),
+                    camera.yaw.sin()*camera.pitch.cos(),
+                ).normalize();
+                let mut new_blocks: Vec<(Point3<usize>, BlockType)> = Vec::new();
+                for t in 0..5 {
+                    let block_world_pos = point![
+                        (dir.x * t as f32 + self.position.x) as i32,
+                        (dir.y * t as f32 + self.position.y) as i32,
+                        (dir.z * t as f32 + self.position.z) as i32,
+                    ];
+                    if let Some((block_pos, block)) = terrain.get_block(block_world_pos) {
+                        if block != BlockType::Air {
+                            new_blocks.push((block_pos, BlockType::Air));
+                            break;
+                        }
+                    }
+                }
+                terrain_changes.modified_chunks.insert(self.chunk_position, new_blocks);
+                /*
                 if let Some(current_chunk) = terrain.get_chunk(self.chunk_position) {
                     if !current_chunk.is_empty {
                         let mut new_blocks = Vec::new();
@@ -106,7 +127,6 @@ impl Player {
                         terrain_changes.modified_chunks.insert(self.chunk_position, new_blocks);
                     }
                 }
-                /*
                 let dir = Vector3::new(
                     camera.yaw.cos()*camera.pitch.cos(),
                     camera.pitch.sin(),
