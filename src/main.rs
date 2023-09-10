@@ -9,6 +9,9 @@ mod chunk;
 mod block;
 mod terrain;
 use gpu_state::GpuState;
+use crate::terrain::TerrainChanges;
+use crate::block::BlockType;
+use crate::chunk::CHUNK_SIZE;
 
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
@@ -17,6 +20,7 @@ use winit::{
     dpi::{PhysicalPosition, LogicalSize},
 };
 use nalgebra::{Point3, point};
+use std::collections::HashMap;
 
 fn main() {
     env_logger::init();
@@ -110,7 +114,32 @@ fn main() {
                     f32::floor(player.position[2] / chunk::CHUNK_SIZE as f32) as i32,
                 ];
 
-                let terrain_changes = terrain.update(player_chunk_pos, &gpu.device, &thread_pool);
+                let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
+                let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
+                let mut modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>> = HashMap::new();
+                let mut terrain_changes = TerrainChanges {
+                    loaded_chunks,
+                    unloaded_chunks,
+                    modified_chunks,
+                };
+                match terrain.chunk_map.get(&player_chunk_pos) {
+                    Some(chunk_data) => {
+                        if !chunk_data.is_empty {
+                            let mut new_blocks = Vec::new();
+                            for x in 0..CHUNK_SIZE {
+                                for y in 0..CHUNK_SIZE {
+                                    for z in 0..CHUNK_SIZE {
+                                        new_blocks.push((point![x, y, z], BlockType::Air));
+                                    }
+                                }
+                            }
+                            terrain_changes.modified_chunks.insert(player_chunk_pos, new_blocks);
+                        }
+                    },
+                    None => {},
+                }
+
+                let terrain_changes = terrain.update(player_chunk_pos, terrain_changes, &gpu.device, &thread_pool);
                 terrain_mesh.update(&terrain_changes, &terrain, player_chunk_pos, &gpu.device, &thread_pool);
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame

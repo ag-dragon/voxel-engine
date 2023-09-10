@@ -113,19 +113,19 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> ChunkGenResponse {
 }
 
 pub struct TerrainChanges {
-    loaded_chunks: Vec<Point3<i32>>,
-    unloaded_chunks: Vec<Point3<i32>>,
-    modified_chunks: Vec<Point3<i32>>,
+    pub loaded_chunks: Vec<Point3<i32>>,
+    pub unloaded_chunks: Vec<Point3<i32>>,
+    pub modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>>,
 }
 
 pub struct ChunkData {
     chunk: Chunk,
-    is_empty: bool,
+    pub is_empty: bool,
 }
 
 pub struct Terrain {
     player_chunk: Point3<i32>,
-    chunk_map: HashMap<Point3<i32>, ChunkData>,
+    pub chunk_map: HashMap<Point3<i32>, ChunkData>,
     loading_tx: mpsc::Sender<ChunkGenResponse>, // for cloning and handing to worker threads
     loading_rx: mpsc::Receiver<ChunkGenResponse>,
     load_todo: Vec<Point3<i32>>,
@@ -219,14 +219,19 @@ impl Terrain {
         }
     }
 
-    // checks if player enters new chunk
-    // loads new chunk from queue
-    // spawns new tasks for worker threads from mesh todo list
-    // sends completed meshes to gpu and adds to meshed chunks map
-    pub fn update(&mut self, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
+    pub fn update(&mut self, player_pos: Point3<i32>, terrain_changes: TerrainChanges, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
         let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
         let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut modified_chunks: Vec<Point3<i32>> = Vec::new();
+        let mut modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>> = HashMap::new();
+
+        for (chunk_pos, block_changes) in &terrain_changes.modified_chunks {
+            let mut chunk_data = self.chunk_map.get_mut(&chunk_pos).unwrap();
+            for (block_pos, new_block) in block_changes {
+                chunk_data.chunk.set_block(*new_block, block_pos.x, block_pos.y, block_pos.z);
+            }
+            chunk_data.is_empty = !chunk_data.chunk.blocks.into_iter().any(|b| b != BlockType::Air);
+            modified_chunks.insert(*chunk_pos, block_changes.to_vec());
+        }
 
         if player_pos != self.player_chunk ||
             (self.chunk_map.is_empty() && self.load_todo.is_empty() && self.loading.is_empty()) {
@@ -422,6 +427,39 @@ impl TerrainMesh {
                                 chunk.z + z,
                             ];
                             self.meshes_todo.retain(|chunk| *chunk != n_pos);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (chunk, _) in &terrain_changes.modified_chunks {
+            println!["hi {:?}", chunk];
+            if terrain_data.check_neighbors(*chunk) {
+                self.meshes_todo.push_front(*chunk);
+            }
+
+            for x in -1..=1 {
+                for y in -1..=1 {
+                    for z in -1..=1 {
+                        let n_pos = point![
+                            chunk.x + x,
+                            chunk.y + y,
+                            chunk.z + z,
+                        ];
+                        if !self.meshes_todo.contains(&n_pos) {
+                            match terrain_data.chunk_map.get(&n_pos) {
+                                Some(n_data) => {
+                                    if !n_data.is_empty && terrain_data.check_neighbors(n_pos) {
+                                        if (n_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
+                                        && (n_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
+                                        && (n_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
+                                            self.meshes_todo.push_front(n_pos);
+                                        }
+                                    }
+                                },
+                                None => {},
+                            }
                         }
                     }
                 }
