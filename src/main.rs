@@ -106,41 +106,10 @@ fn main() {
                 let now = std::time::Instant::now();
                 let dt = now - last_render_time;
                 last_render_time = now;
-                player.update(&mut camera, dt, &input);
+                let terrain_changes = player.update(&mut camera, dt, &input, &terrain);
 
-                let player_chunk_pos = point![
-                    f32::floor(player.position[0] / chunk::CHUNK_SIZE as f32) as i32,
-                    f32::floor(player.position[1] / chunk::CHUNK_SIZE as f32) as i32,
-                    f32::floor(player.position[2] / chunk::CHUNK_SIZE as f32) as i32,
-                ];
-
-                let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
-                let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
-                let mut modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>> = HashMap::new();
-                let mut terrain_changes = TerrainChanges {
-                    loaded_chunks,
-                    unloaded_chunks,
-                    modified_chunks,
-                };
-                match terrain.chunk_map.get(&player_chunk_pos) {
-                    Some(chunk_data) => {
-                        if !chunk_data.is_empty {
-                            let mut new_blocks = Vec::new();
-                            for x in 0..CHUNK_SIZE {
-                                for y in 0..CHUNK_SIZE {
-                                    for z in 0..CHUNK_SIZE {
-                                        new_blocks.push((point![x, y, z], BlockType::Air));
-                                    }
-                                }
-                            }
-                            terrain_changes.modified_chunks.insert(player_chunk_pos, new_blocks);
-                        }
-                    },
-                    None => {},
-                }
-
-                let terrain_changes = terrain.update(player_chunk_pos, terrain_changes, &gpu.device, &thread_pool);
-                terrain_mesh.update(&terrain_changes, &terrain, player_chunk_pos, &gpu.device, &thread_pool);
+                let terrain_changes = terrain.update(player.chunk_position, terrain_changes, &gpu.device, &thread_pool);
+                terrain_mesh.update(&terrain_changes, &terrain, player.chunk_position, &gpu.device, &thread_pool);
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
                 

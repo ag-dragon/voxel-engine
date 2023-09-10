@@ -118,6 +118,20 @@ pub struct TerrainChanges {
     pub modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>>,
 }
 
+impl TerrainChanges {
+    pub fn new() -> Self {
+        let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
+        let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
+        let mut modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>> = HashMap::new();
+
+        Self {
+            loaded_chunks,
+            unloaded_chunks,
+            modified_chunks,
+        }
+    }
+}
+
 pub struct ChunkData {
     chunk: Chunk,
     pub is_empty: bool,
@@ -125,7 +139,7 @@ pub struct ChunkData {
 
 pub struct Terrain {
     player_chunk: Point3<i32>,
-    pub chunk_map: HashMap<Point3<i32>, ChunkData>,
+    chunk_map: HashMap<Point3<i32>, ChunkData>,
     loading_tx: mpsc::Sender<ChunkGenResponse>, // for cloning and handing to worker threads
     loading_rx: mpsc::Receiver<ChunkGenResponse>,
     load_todo: Vec<Point3<i32>>,
@@ -151,6 +165,10 @@ impl Terrain {
             loading,
             unload_todo,
         }
+    }
+
+    pub fn get_chunk(&self, chunk_pos: Point3<i32>) -> Option<&ChunkData> {
+        self.chunk_map.get(&chunk_pos)
     }
 
     pub fn check_neighbors(&self, chunk_pos: Point3<i32>) -> bool {
@@ -219,18 +237,16 @@ impl Terrain {
         }
     }
 
-    pub fn update(&mut self, player_pos: Point3<i32>, terrain_changes: TerrainChanges, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
-        let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>> = HashMap::new();
+    pub fn update(&mut self, player_pos: Point3<i32>, terrain_changes_in: TerrainChanges, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
+        let mut terrain_changes_out = TerrainChanges::new();
 
-        for (chunk_pos, block_changes) in &terrain_changes.modified_chunks {
+        for (chunk_pos, block_changes) in &terrain_changes_in.modified_chunks {
             let mut chunk_data = self.chunk_map.get_mut(&chunk_pos).unwrap();
             for (block_pos, new_block) in block_changes {
                 chunk_data.chunk.set_block(*new_block, block_pos.x, block_pos.y, block_pos.z);
             }
             chunk_data.is_empty = !chunk_data.chunk.blocks.into_iter().any(|b| b != BlockType::Air);
-            modified_chunks.insert(*chunk_pos, block_changes.to_vec());
+            terrain_changes_out.modified_chunks.insert(*chunk_pos, block_changes.to_vec());
         }
 
         if player_pos != self.player_chunk ||
@@ -256,21 +272,18 @@ impl Terrain {
                 is_empty: response.is_empty,
             });
             self.loading.retain(|c| *c != response.position);
-            loaded_chunks.push(response.position);
+            terrain_changes_out.loaded_chunks.push(response.position);
         }
 
         for _ in 0..10 {
             if let Some(chunk) = self.unload_todo.pop() {
                 self.remove_chunk(chunk);
-                unloaded_chunks.push(chunk);
+                terrain_changes_out.unloaded_chunks.push(chunk);
             }
         }
 
-        TerrainChanges {
-            loaded_chunks,
-            unloaded_chunks,
-            modified_chunks,
-        }
+
+        terrain_changes_out
     }
 }
 
@@ -434,7 +447,6 @@ impl TerrainMesh {
         }
 
         for (chunk, _) in &terrain_changes.modified_chunks {
-            println!["hi {:?}", chunk];
             if terrain_data.check_neighbors(*chunk) {
                 self.meshes_todo.push_front(*chunk);
             }
