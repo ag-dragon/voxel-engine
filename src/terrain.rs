@@ -410,6 +410,7 @@ impl TerrainMesh {
             }
         }
 
+        let s = self.meshes_todo.len();
         for chunk in &terrain_changes.loaded_chunks {
             if terrain_data.check_neighbors(*chunk) {
                 if (chunk.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
@@ -426,17 +427,19 @@ impl TerrainMesh {
                             chunk.y + y,
                             chunk.z + z,
                         ];
-                        match terrain_data.chunk_map.get(&n_pos) {
-                            Some(_) => {
-                                if terrain_data.check_neighbors(n_pos) {
-                                    if (n_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
-                                    && (n_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
-                                    && (n_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
-                                        self.meshes_todo.push_back(n_pos);
+                        if !self.meshes_todo.contains(&n_pos) {
+                            match terrain_data.chunk_map.get(&n_pos) {
+                                Some(_) => {
+                                    if terrain_data.check_neighbors(n_pos) {
+                                        if (n_pos.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
+                                        && (n_pos.y - self.player_chunk.y).abs() <= RENDER_DISTANCE
+                                        && (n_pos.z - self.player_chunk.z).abs() <= RENDER_DISTANCE {
+                                            self.meshes_todo.push_back(n_pos);
+                                        }
                                     }
-                                }
-                            },
-                            None => {},
+                                },
+                                None => {},
+                            }
                         }
                     }
                 }
