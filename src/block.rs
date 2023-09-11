@@ -8,6 +8,8 @@ pub enum BlockType {
     Dirt,
     Stone,
     Sand,
+    Wood,
+    Leaves,
 }
 
 impl BlockType {
@@ -21,6 +23,12 @@ impl BlockType {
             BlockType::Dirt => 2,
             BlockType::Stone => 3,
             BlockType::Sand => 4,
+            BlockType::Wood => match face {
+                BlockFace::Top => 22,
+                BlockFace::Bottom => 22,
+                _ => 6,
+            },
+            BlockType::Leaves => 7,
             _ => 255, // Missing Texture
         }
     }
@@ -62,10 +70,10 @@ const TOP_FACE: &[MeshVertex] = &[
     MeshVertex { position: [0.5, 0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
 ];
 const BOTTOM_FACE: &[MeshVertex] = &[
-    MeshVertex { position: [-0.5, -0.5, 0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
-    MeshVertex { position: [0.5, -0.5, 0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
-    MeshVertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
-    MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
+    MeshVertex { position: [-0.5, -0.5, 0.5], tex_coords: [0.0, 1.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
+    MeshVertex { position: [0.5, -0.5, 0.5], tex_coords: [1.0, 1.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
+    MeshVertex { position: [-0.5, -0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
+    MeshVertex { position: [0.5, -0.5, -0.5], tex_coords: [1.0, 0.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },
 ];
 const LEFT_FACE: &[MeshVertex] = &[
     MeshVertex { position: [-0.5, 0.5, -0.5], tex_coords: [0.0, 0.0], normal: [0.0, 0.0, 0.0], ao: 0.0 },

@@ -107,13 +107,45 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
     }
 
     for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE-1 {
+        for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
                 let block = blocks[x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE];
                 if block == BlockType::Grass {
                     let rval = rng.gen_range(0.0..1.0);
                     if rval > 0.99 {
-                        blocks[x + (y+1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Stone;
+                        for tree_height in 1..6 {
+                            if y+tree_height < CHUNK_SIZE {
+                                blocks[x + (y+tree_height)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Wood;
+                            }
+                        }
+
+                        for leaf_height in 4..6 {
+                            for lx in -2..=2 {
+                                for lz in -2..=2 {
+                                    if ((x as i32+lx) as usize) < CHUNK_SIZE && (x as i32+lx) as usize >= 0
+                                    && ((z as i32+lz) as usize) < CHUNK_SIZE && (z as i32+lz) as usize >= 0
+                                    && y+leaf_height < CHUNK_SIZE {
+                                        blocks[
+                                            (x as i32+lx) as usize
+                                            + (y+leaf_height)*CHUNK_SIZE
+                                            + (z as i32+lz) as usize*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Leaves;
+                                    }
+                                }
+                            }
+                        }
+
+                        for lx in -1..=1 {
+                            for lz in -1..=1 {
+                                    if ((x as i32+lx) as usize) < CHUNK_SIZE && (x as i32+lx) as usize >= 0
+                                    && ((z as i32+lz) as usize) < CHUNK_SIZE && (z as i32+lz) as usize >= 0
+                                    && y+6 < CHUNK_SIZE {
+                                        blocks[
+                                            (x as i32+lx) as usize
+                                            + (y+6)*CHUNK_SIZE
+                                            + (z as i32+lz) as usize*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Leaves;
+                                    }
+                            }
+                        }
                     }
                 }
             }
