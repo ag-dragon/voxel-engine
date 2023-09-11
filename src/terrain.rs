@@ -106,9 +106,9 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
         }
     }
 
-    for x in 0..CHUNK_SIZE {
-        for y in 0..CHUNK_SIZE {
-            for z in 0..CHUNK_SIZE {
+    for x in 2..CHUNK_SIZE-2 {
+        for y in 0..CHUNK_SIZE-6 {
+            for z in 2..CHUNK_SIZE-2 {
                 let block = blocks[x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE];
                 if block == BlockType::Grass {
                     let rval = rng.gen_range(0.0..1.0);
