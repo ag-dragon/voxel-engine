@@ -4,6 +4,7 @@ use crate::mesh::{Mesh, CMesh, MeshVertex};
 use nalgebra::{Vector3, vector};
 use rayon::ThreadPool;
 use noise::{NoiseFn, Perlin, Curve};
+use rand::Rng;
 use std::{
     collections::{HashMap, VecDeque},
     sync::mpsc,
@@ -19,6 +20,7 @@ pub struct ChunkGenResponse {
 
 // function used by worker threads
 pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
+    let mut rng = rand::thread_rng();
     let perlin = Perlin::new(134);
     let mut continental_noise: Curve<f64, Perlin, 2> = Curve::new(perlin);
     continental_noise = continental_noise.add_control_point(-1.01, 50.0);
@@ -98,6 +100,20 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
                         blocks[x + (max_y-2)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Dirt;
                     } else if max_y >= 1 {
                         blocks[x + (max_y-1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Dirt;
+                    }
+                }
+            }
+        }
+    }
+
+    for x in 0..CHUNK_SIZE {
+        for y in 0..CHUNK_SIZE-1 {
+            for z in 0..CHUNK_SIZE {
+                let block = blocks[x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE];
+                if block == BlockType::Grass {
+                    let rval = rng.gen_range(0.0..1.0);
+                    if rval > 0.99 {
+                        blocks[x + (y+1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Stone;
                     }
                 }
             }
