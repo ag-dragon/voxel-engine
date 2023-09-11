@@ -222,18 +222,43 @@ impl Terrain {
 
     // upon entering new chunk, add list of new chunks to load todo
     pub fn load_chunks(&mut self, chunk_pos: Vector3<i32>) {
-        for x in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
-            for y in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
-                for z in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1{
-                    let cpos = vector![
-                        chunk_pos.x + x,
-                        chunk_pos.y + y,
-                        chunk_pos.z + z,
-                    ];
-                    if !self.chunk_map.contains_key(&cpos)
-                    && !self.load_todo.contains(&cpos) 
-                    && !self.loading.contains(&cpos) {
-                        self.load_todo.push(cpos);
+        if !self.chunk_map.contains_key(&chunk_pos)
+        && !self.load_todo.contains(&chunk_pos) 
+        && !self.loading.contains(&chunk_pos) {
+            self.load_todo.push(chunk_pos);
+        }
+        for radius in 1..=RENDER_DISTANCE+1 {
+            for edge in (-radius..=radius).step_by((radius*2) as usize) {
+                for x in -radius..=radius {
+                    for z in -radius..=radius {
+                        let cpos = chunk_pos + vector![x, edge, z];
+                        if !self.chunk_map.contains_key(&cpos)
+                        && !self.load_todo.contains(&cpos) 
+                        && !self.loading.contains(&cpos) {
+                            self.load_todo.push(cpos);
+                        }
+                    }
+                }
+
+                for y in -radius+1..=radius-1 {
+                    for z in -radius..=radius {
+                        let cpos = chunk_pos + vector![edge, y, z];
+                        if !self.chunk_map.contains_key(&cpos)
+                        && !self.load_todo.contains(&cpos) 
+                        && !self.loading.contains(&cpos) {
+                            self.load_todo.push(cpos);
+                        }
+                    }
+                }
+
+                for y in -radius+1..=radius-1 {
+                    for x in -radius+1..=radius-1 {
+                        let cpos = chunk_pos + vector![x, y, edge];
+                        if !self.chunk_map.contains_key(&cpos)
+                        && !self.load_todo.contains(&cpos) 
+                        && !self.loading.contains(&cpos) {
+                            self.load_todo.push(cpos);
+                        }
                     }
                 }
             }
