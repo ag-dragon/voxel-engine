@@ -99,11 +99,11 @@ impl Player {
                     camera.yaw.sin()*camera.pitch.cos(),
                 ).normalize();
                 let mut new_blocks: Vec<(Point3<usize>, BlockType)> = Vec::new();
-                for t in 0..5 {
+                for t in 0..50 {
                     let block_world_pos = point![
-                        (dir.x * t as f32 + self.position.x).round() as i32,
-                        (dir.y * t as f32 + self.position.y).round() as i32,
-                        (dir.z * t as f32 + self.position.z).round() as i32,
+                        (dir.x * (t as f32 / 10.0) + self.position.x).round() as i32,
+                        (dir.y * (t as f32 / 10.0) + self.position.y).round() as i32,
+                        (dir.z * (t as f32 / 10.0) + self.position.z).round() as i32,
                     ];
                     let c_pos = point![
                         f32::floor(block_world_pos.x as f32 / chunk::CHUNK_SIZE as f32) as i32,
