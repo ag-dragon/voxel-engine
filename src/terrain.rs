@@ -1,7 +1,7 @@
 use crate::block::{BlockType, BlockFace};
 use crate::chunk::{Chunk, CHUNK_SIZE};
 use crate::mesh::{Mesh, CMesh, MeshVertex};
-use nalgebra::{Point3, point};
+use nalgebra::{Vector3, vector};
 use rayon::ThreadPool;
 use noise::{NoiseFn, Perlin, Curve};
 use std::{
@@ -12,13 +12,13 @@ use std::{
 const RENDER_DISTANCE: i32 = 8;
 
 pub struct ChunkGenResponse {
-    position: Point3<i32>,
+    position: Vector3<i32>,
     chunk: Chunk,
     is_empty: bool,
 }
 
 // function used by worker threads
-pub fn gen_chunk(chunk_pos: Point3<i32>) -> ChunkGenResponse {
+pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
     let perlin = Perlin::new(134);
     let mut continental_noise: Curve<f64, Perlin, 2> = Curve::new(perlin);
     continental_noise = continental_noise.add_control_point(-1.01, 50.0);
@@ -113,16 +113,16 @@ pub fn gen_chunk(chunk_pos: Point3<i32>) -> ChunkGenResponse {
 }
 
 pub struct TerrainChanges {
-    pub loaded_chunks: Vec<Point3<i32>>,
-    pub unloaded_chunks: Vec<Point3<i32>>,
-    pub modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>>,
+    pub loaded_chunks: Vec<Vector3<i32>>,
+    pub unloaded_chunks: Vec<Vector3<i32>>,
+    pub modified_chunks: HashMap<Vector3<i32>, Vec<(Vector3<usize>, BlockType)>>,
 }
 
 impl TerrainChanges {
     pub fn new() -> Self {
-        let mut loaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut unloaded_chunks: Vec<Point3<i32>> = Vec::new();
-        let mut modified_chunks: HashMap<Point3<i32>, Vec<(Point3<usize>, BlockType)>> = HashMap::new();
+        let loaded_chunks: Vec<Vector3<i32>> = Vec::new();
+        let unloaded_chunks: Vec<Vector3<i32>> = Vec::new();
+        let modified_chunks: HashMap<Vector3<i32>, Vec<(Vector3<usize>, BlockType)>> = HashMap::new();
 
         Self {
             loaded_chunks,
@@ -138,23 +138,23 @@ pub struct ChunkData {
 }
 
 pub struct Terrain {
-    player_chunk: Point3<i32>,
-    chunk_map: HashMap<Point3<i32>, ChunkData>,
+    player_chunk: Vector3<i32>,
+    chunk_map: HashMap<Vector3<i32>, ChunkData>,
     loading_tx: mpsc::Sender<ChunkGenResponse>, // for cloning and handing to worker threads
     loading_rx: mpsc::Receiver<ChunkGenResponse>,
-    load_todo: Vec<Point3<i32>>,
-    loading: Vec<Point3<i32>>,
-    unload_todo: Vec<Point3<i32>>,
+    load_todo: Vec<Vector3<i32>>,
+    loading: Vec<Vector3<i32>>,
+    unload_todo: Vec<Vector3<i32>>,
 }
 
 impl Terrain {
     pub fn new() -> Self {
-        let player_chunk = point![0, 0, 0];
-        let chunk_map: HashMap<Point3<i32>, ChunkData> = HashMap::new();
+        let player_chunk = vector![0, 0, 0];
+        let chunk_map: HashMap<Vector3<i32>, ChunkData> = HashMap::new();
         let (loading_tx, loading_rx) = mpsc::channel();
-        let load_todo: Vec<Point3<i32>> = Vec::new();
-        let loading: Vec<Point3<i32>> = Vec::new();
-        let unload_todo: Vec<Point3<i32>> = Vec::new();
+        let load_todo: Vec<Vector3<i32>> = Vec::new();
+        let loading: Vec<Vector3<i32>> = Vec::new();
+        let unload_todo: Vec<Vector3<i32>> = Vec::new();
 
         Self {
             player_chunk,
@@ -167,37 +167,33 @@ impl Terrain {
         }
     }
 
-    pub fn get_chunk(&self, chunk_pos: Point3<i32>) -> Option<&ChunkData> {
+    pub fn get_chunk(&self, chunk_pos: Vector3<i32>) -> Option<&ChunkData> {
         self.chunk_map.get(&chunk_pos)
     }
 
-    pub fn get_block(&self, block_world_pos: Point3<i32>) -> Option<(Point3<usize>, BlockType)> {
-        let block_pos = point![
+    pub fn get_block(&self, block_world_pos: Vector3<i32>) -> Option<(Vector3<usize>, BlockType)> {
+        let block_pos = vector![
             ((block_world_pos.x % CHUNK_SIZE as i32) + CHUNK_SIZE as i32) % CHUNK_SIZE as i32,
             ((block_world_pos.y % CHUNK_SIZE as i32) + CHUNK_SIZE as i32) % CHUNK_SIZE as i32,
             ((block_world_pos.z % CHUNK_SIZE as i32) + CHUNK_SIZE as i32) % CHUNK_SIZE as i32,
         ];
-        let chunk_pos = point![
-            (block_world_pos.x - block_pos.x) / CHUNK_SIZE as i32,
-            (block_world_pos.y - block_pos.y) / CHUNK_SIZE as i32,
-            (block_world_pos.z - block_pos.z) / CHUNK_SIZE as i32,
-        ];
+        let chunk_pos = (block_world_pos - block_pos) / CHUNK_SIZE as i32;
         if let Some(chunk_data) = self.get_chunk(chunk_pos) {
             Some((
-                point![block_pos.x as usize, block_pos.y as usize, block_pos.z as usize],
-                chunk_data.chunk.get_block(block_pos.x as usize, block_pos.y as usize, block_pos.z as usize),
+                block_pos.try_cast::<usize>().unwrap(),
+                chunk_data.chunk.get_block(block_pos.try_cast::<usize>().unwrap()),
             ))
         } else {
             None
         }
     }
 
-    pub fn check_neighbors(&self, chunk_pos: Point3<i32>) -> bool {
+    pub fn check_neighbors(&self, chunk_pos: Vector3<i32>) -> bool {
         let mut result = true;
         for x in -1..=1 {
             for y in -1..=1 {
                 for z in -1..=1 {
-                    if !self.chunk_map.contains_key(&point![
+                    if !self.chunk_map.contains_key(&vector![
                         chunk_pos.x + x,
                         chunk_pos.y + y,
                         chunk_pos.z + z,
@@ -210,7 +206,7 @@ impl Terrain {
         result
     }
 
-    pub fn add_chunk(&mut self, chunk_pos: Point3<i32>, chunk: ChunkData) {
+    pub fn add_chunk(&mut self, chunk_pos: Vector3<i32>, chunk: ChunkData) {
         if let Some(_) = self.chunk_map.insert(chunk_pos, chunk) {
             // we just overwrote another chunk, no reason this should be able to happen currently
             eprintln!["uh oh, a chunk was overwritten by another"];
@@ -219,17 +215,17 @@ impl Terrain {
     }
 
     // unload chunk
-    pub fn remove_chunk(&mut self, chunk_pos: Point3<i32>) {
+    pub fn remove_chunk(&mut self, chunk_pos: Vector3<i32>) {
         self.chunk_map.remove(&chunk_pos);
         self.load_todo.retain(|chunk| *chunk != chunk_pos);
     }
 
     // upon entering new chunk, add list of new chunks to load todo
-    pub fn load_chunks(&mut self, chunk_pos: Point3<i32>) {
+    pub fn load_chunks(&mut self, chunk_pos: Vector3<i32>) {
         for x in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
             for y in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1 {
                 for z in -RENDER_DISTANCE-1..=RENDER_DISTANCE+1{
-                    let cpos = point![
+                    let cpos = vector![
                         chunk_pos.x + x,
                         chunk_pos.y + y,
                         chunk_pos.z + z,
@@ -245,8 +241,8 @@ impl Terrain {
     }
 
     // upon entering new chunk, remove all chunks that are too far from player
-    pub fn unload_chunks(&mut self, chunk_pos: Point3<i32>) {
-        let mut unload_chunks: Vec<Point3<i32>> = self.chunk_map.keys().cloned().collect();
+    pub fn unload_chunks(&mut self, chunk_pos: Vector3<i32>) {
+        let mut unload_chunks: Vec<Vector3<i32>> = self.chunk_map.keys().cloned().collect();
         unload_chunks.retain(|cpos| {
             (cpos.x - chunk_pos.x).abs() > RENDER_DISTANCE+1
             || (cpos.y - chunk_pos.y).abs() > RENDER_DISTANCE+1
@@ -258,13 +254,13 @@ impl Terrain {
         }
     }
 
-    pub fn update(&mut self, player_pos: Point3<i32>, terrain_changes_in: TerrainChanges, device: &wgpu::Device, thread_pool: &ThreadPool) -> TerrainChanges {
+    pub fn update(&mut self, player_pos: Vector3<i32>, terrain_changes_in: TerrainChanges, thread_pool: &ThreadPool) -> TerrainChanges {
         let mut terrain_changes_out = TerrainChanges::new();
 
         for (chunk_pos, block_changes) in &terrain_changes_in.modified_chunks {
             let mut chunk_data = self.chunk_map.get_mut(&chunk_pos).unwrap();
             for (block_pos, new_block) in block_changes {
-                chunk_data.chunk.set_block(*new_block, block_pos.x, block_pos.y, block_pos.z);
+                chunk_data.chunk.set_block(*new_block, *block_pos);
             }
             chunk_data.is_empty = !chunk_data.chunk.blocks.into_iter().any(|b| b != BlockType::Air);
             terrain_changes_out.modified_chunks.insert(*chunk_pos, block_changes.to_vec());
@@ -309,7 +305,7 @@ impl Terrain {
 }
 
 // function used by worker threads
-pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
+pub fn mesh_chunk(chunk_pos: Vector3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
     let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
     let mut chunk_indices: Vec<u32> = Vec::new();
     let mut o: u32 = 0;
@@ -319,51 +315,51 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
             BlockType::Air => {},
             _ => {
                 for face in BlockFace::iterator() {
-                    let x = i % CHUNK_SIZE;
-                    let y = (i / CHUNK_SIZE) % CHUNK_SIZE;
-                    let z = i / (CHUNK_SIZE*CHUNK_SIZE);
-                    let mut nx: i32 = x as i32;
-                    let mut ny: i32 = y as i32;
-                    let mut nz: i32 = z as i32;
+                    let block_pos = vector![
+                        i % CHUNK_SIZE,
+                        (i / CHUNK_SIZE) % CHUNK_SIZE,
+                        i / (CHUNK_SIZE*CHUNK_SIZE),
+                    ];
+                    let mut n = block_pos.cast::<i32>();
                     match face {
-                        BlockFace::Top => ny += 1,
-                        BlockFace::Bottom => ny -= 1,
-                        BlockFace::Front => nz += 1,
-                        BlockFace::Back => nz -= 1,
-                        BlockFace::Right => nx += 1,
-                        BlockFace::Left => nx -= 1,
+                        BlockFace::Top => n.y += 1,
+                        BlockFace::Bottom => n.y -= 1,
+                        BlockFace::Front => n.z += 1,
+                        BlockFace::Back => n.z -= 1,
+                        BlockFace::Right => n.x += 1,
+                        BlockFace::Left => n.x -= 1,
                     }
-                    match chunk.get_block_border(neighbors, nx, ny, nz) {
+                    match chunk.get_block_border(neighbors, n) {
                         BlockType::Air => {
                             chunk_vertices.extend(
                                 face.get_vertices().into_iter().map(|v| {
                                     let mut ao = 0.0;
-                                    let n1 = point![
-                                        x as i32 + (v.position[0] * 2.0) as i32,
-                                        y as i32 + (v.position[1] * 2.0) as i32,
-                                        z as i32,
+                                    let n1 = vector![
+                                        block_pos.x as i32 + (v.position[0] * 2.0) as i32,
+                                        block_pos.y as i32 + (v.position[1] * 2.0) as i32,
+                                        block_pos.z as i32,
                                     ];
-                                    let n2 = point![
-                                        x as i32,
-                                        y as i32 + (v.position[1] * 2.0) as i32,
-                                        z as i32 + (v.position[2] * 2.0) as i32,
+                                    let n2 = vector![
+                                        block_pos.x as i32,
+                                        block_pos.y as i32 + (v.position[1] * 2.0) as i32,
+                                        block_pos.z as i32 + (v.position[2] * 2.0) as i32,
                                     ];
-                                    let n3 = point![
-                                        x as i32 + (v.position[0] * 2.0) as i32,
-                                        y as i32 + (v.position[1] * 2.0) as i32,
-                                        z as i32 + (v.position[2] * 2.0) as i32,
+                                    let n3 = vector![
+                                        block_pos.x as i32 + (v.position[0] * 2.0) as i32,
+                                        block_pos.y as i32 + (v.position[1] * 2.0) as i32,
+                                        block_pos.z as i32 + (v.position[2] * 2.0) as i32,
                                     ];
 
                                     let mut cv = false;
-                                    if chunk.get_block_border(neighbors, n1.x, n1.y, n1.z).opaque() {
+                                    if chunk.get_block_border(neighbors, n1).opaque() {
                                         ao += 1.0;
                                         cv = true;
                                     }
-                                    if chunk.get_block_border(neighbors, n2.x, n2.y, n2.z).opaque() {
+                                    if chunk.get_block_border(neighbors, n2).opaque() {
                                         ao += 1.0;
                                         cv = true;
                                     }
-                                    if cv && chunk.get_block_border(neighbors, n3.x, n3.y, n3.z).opaque() {
+                                    if cv && chunk.get_block_border(neighbors, n3).opaque() {
                                         ao += 1.0;
                                     }
                                     
@@ -403,19 +399,19 @@ pub fn mesh_chunk(chunk_pos: Point3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> 
 }
 
 pub struct TerrainMesh {
-    player_chunk: Point3<i32>,
-    meshed_chunks: HashMap<Point3<i32>, Mesh>,
-    meshing_tx: mpsc::Sender<(Point3<i32>, CMesh)>,
-    meshing_rx: mpsc::Receiver<(Point3<i32>, CMesh)>,
-    meshes_todo: VecDeque<Point3<i32>>,
+    player_chunk: Vector3<i32>,
+    meshed_chunks: HashMap<Vector3<i32>, Mesh>,
+    meshing_tx: mpsc::Sender<(Vector3<i32>, CMesh)>,
+    meshing_rx: mpsc::Receiver<(Vector3<i32>, CMesh)>,
+    meshes_todo: VecDeque<Vector3<i32>>,
 }
 
 impl TerrainMesh {
     pub fn new() -> Self {
-        let player_chunk = point![0, 0, 0];
-        let meshed_chunks: HashMap<Point3<i32>, Mesh> = HashMap::new();
+        let player_chunk = vector![0, 0, 0];
+        let meshed_chunks: HashMap<Vector3<i32>, Mesh> = HashMap::new();
         let (meshing_tx, meshing_rx) = mpsc::channel();
-        let meshes_todo: VecDeque<Point3<i32>> = VecDeque::new();
+        let meshes_todo: VecDeque<Vector3<i32>> = VecDeque::new();
 
         Self {
             player_chunk,
@@ -426,13 +422,13 @@ impl TerrainMesh {
         }
     }
 
-    pub fn insert_chunk(&mut self, chunk_pos: Point3<i32>, mesh: Mesh) {
+    pub fn insert_chunk(&mut self, chunk_pos: Vector3<i32>, mesh: Mesh) {
         if let Some(_) = self.meshed_chunks.insert(chunk_pos, mesh) {
             // old mesh rewritten. If I add metadata for meshes, delete it here
         }
     }
 
-    pub fn remove_chunk(&mut self, chunk_pos: Point3<i32>) {
+    pub fn remove_chunk(&mut self, chunk_pos: Vector3<i32>) {
         self.meshed_chunks.remove(&chunk_pos);
         self.meshes_todo.retain(|chunk| *chunk != chunk_pos);
     }
@@ -445,7 +441,7 @@ impl TerrainMesh {
         render_meshes
     }
 
-    pub fn update(&mut self, terrain_changes: &TerrainChanges, terrain_data: &Terrain, player_pos: Point3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) {
+    pub fn update(&mut self, terrain_changes: &TerrainChanges, terrain_data: &Terrain, player_pos: Vector3<i32>, device: &wgpu::Device, thread_pool: &ThreadPool) {
         self.player_chunk = player_pos;
 
         for chunk in &terrain_changes.unloaded_chunks {
@@ -455,11 +451,7 @@ impl TerrainMesh {
                 for y in -1..=1 {
                     for z in -1..=1 {
                         if x != 0 || y != 0 || z != 0 {
-                            let n_pos = point![
-                                chunk.x + x,
-                                chunk.y + y,
-                                chunk.z + z,
-                            ];
+                            let n_pos = chunk + vector![x, y, z];
                             self.meshes_todo.retain(|chunk| *chunk != n_pos);
                         }
                     }
@@ -475,11 +467,7 @@ impl TerrainMesh {
             for x in -1..=1 {
                 for y in -1..=1 {
                     for z in -1..=1 {
-                        let n_pos = point![
-                            chunk.x + x,
-                            chunk.y + y,
-                            chunk.z + z,
-                        ];
+                        let n_pos = chunk + vector![x, y, z];
                         if !self.meshes_todo.contains(&n_pos) {
                             match terrain_data.chunk_map.get(&n_pos) {
                                 Some(n_data) => {
@@ -499,7 +487,6 @@ impl TerrainMesh {
             }
         }
 
-        let s = self.meshes_todo.len();
         for chunk in &terrain_changes.loaded_chunks {
             if !terrain_data.chunk_map.get(chunk).unwrap().is_empty && terrain_data.check_neighbors(*chunk) {
                 if (chunk.x - self.player_chunk.x).abs() <= RENDER_DISTANCE
@@ -512,11 +499,7 @@ impl TerrainMesh {
             for x in -1..=1 {
                 for y in -1..=1 {
                     for z in -1..=1 {
-                        let n_pos = point![
-                            chunk.x + x,
-                            chunk.y + y,
-                            chunk.z + z,
-                        ];
+                        let n_pos = chunk + vector![x, y, z];
                         if !self.meshes_todo.contains(&n_pos) {
                             match terrain_data.chunk_map.get(&n_pos) {
                                 Some(n_data) => {
@@ -547,9 +530,7 @@ impl TerrainMesh {
                 for z in -1..=1 {
                     for y in -1..=1 {
                         for x in -1..=1 {
-                            match terrain_data.chunk_map.get(&point![
-                                chunk.x+x, chunk.y+y, chunk.z+z
-                            ]) {
+                            match terrain_data.chunk_map.get(&(chunk+vector![x, y, z])) {
                                 Some(nchunk) => neighbor_chunks.push((*nchunk).chunk.clone()),
                                 None => {
                                     self.meshes_todo.push_back(chunk);
@@ -568,7 +549,7 @@ impl TerrainMesh {
         }
 
         // TODO: limit this to a certain number per second based on delta time, similar to veloren
-        let completed_meshes: Vec<(Point3<i32>, CMesh)> = self.meshing_rx.try_iter().collect();
+        let completed_meshes: Vec<(Vector3<i32>, CMesh)> = self.meshing_rx.try_iter().collect();
         for (chunk, mesh) in completed_meshes {
             if terrain_data.chunk_map.contains_key(&chunk) {
                 self.insert_chunk(chunk, Mesh::new(device, &mesh));

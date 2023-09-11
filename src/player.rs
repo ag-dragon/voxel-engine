@@ -5,7 +5,7 @@ use crate::chunk;
 use crate::block::BlockType;
 use winit::event::VirtualKeyCode;
 use winit::event;
-use nalgebra::{Vector3, Point3, point};
+use nalgebra::{Vector3, vector};
 use std::time::Duration;
 use std::f32::consts::FRAC_PI_2;
 
@@ -13,16 +13,16 @@ const SAFE_FRAC_PI_2: f32 = FRAC_PI_2 - 0.0001;
 
 #[derive(Debug)]
 pub struct Player {
-    pub position: Point3<f32>,
-    pub chunk_position: Point3<i32>,
+    pub position: Vector3<f32>,
+    pub chunk_position: Vector3<i32>,
     speed: f32,
     sensitivity: f32,
     mouse_p: bool,
 }
 
 impl Player {
-    pub fn new(position: Point3<f32>, speed: f32, sensitivity: f32) -> Self {
-        let chunk_position = point![
+    pub fn new(position: Vector3<f32>, speed: f32, sensitivity: f32) -> Self {
+        let chunk_position = vector![
             f32::floor(position[0] / chunk::CHUNK_SIZE as f32) as i32,
             f32::floor(position[1] / chunk::CHUNK_SIZE as f32) as i32,
             f32::floor(position[2] / chunk::CHUNK_SIZE as f32) as i32,
@@ -83,7 +83,7 @@ impl Player {
             camera.pitch = SAFE_FRAC_PI_2;
         }
 
-        self.chunk_position = point![
+        self.chunk_position = vector![
             f32::floor((self.position[0]-0.5) / chunk::CHUNK_SIZE as f32) as i32,
             f32::floor((self.position[1]-0.5) / chunk::CHUNK_SIZE as f32) as i32,
             f32::floor((self.position[2]-0.5) / chunk::CHUNK_SIZE as f32) as i32,
@@ -98,14 +98,13 @@ impl Player {
                     camera.pitch.sin(),
                     camera.yaw.sin()*camera.pitch.cos(),
                 ).normalize();
-                let mut new_blocks: Vec<(Point3<usize>, BlockType)> = Vec::new();
                 for t in 0..50 {
-                    let block_world_pos = point![
+                    let block_world_pos = vector![
                         (dir.x * (t as f32 / 10.0) + self.position.x).round() as i32,
                         (dir.y * (t as f32 / 10.0) + self.position.y).round() as i32,
                         (dir.z * (t as f32 / 10.0) + self.position.z).round() as i32,
                     ];
-                    let c_pos = point![
+                    let c_pos = vector![
                         f32::floor(block_world_pos.x as f32 / chunk::CHUNK_SIZE as f32) as i32,
                         f32::floor(block_world_pos.y as f32 / chunk::CHUNK_SIZE as f32) as i32,
                         f32::floor(block_world_pos.z as f32 / chunk::CHUNK_SIZE as f32) as i32,

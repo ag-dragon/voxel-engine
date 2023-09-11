@@ -9,9 +9,6 @@ mod chunk;
 mod block;
 mod terrain;
 use gpu_state::GpuState;
-use crate::terrain::TerrainChanges;
-use crate::block::BlockType;
-use crate::chunk::CHUNK_SIZE;
 
 use winit::{
     event::{Event, WindowEvent, ElementState, VirtualKeyCode, KeyboardInput},
@@ -19,8 +16,7 @@ use winit::{
     window::{WindowBuilder},
     dpi::{PhysicalPosition, LogicalSize},
 };
-use nalgebra::{Point3, point};
-use std::collections::HashMap;
+use nalgebra::Vector3;
 
 fn main() {
     env_logger::init();
@@ -40,10 +36,10 @@ fn main() {
 
     let mut input = input::InputState::new();
     let mut camera = camera::Camera::new(
-        Point3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
+        Vector3::new(0.0, 16.0, 4.0), f32::to_radians(-90.0), f32::to_radians(-20.0),
         gpu.config.width as f32 / gpu.config.height as f32,
         f32::to_radians(90.0), 0.1, 1000.0);
-    let mut player = player::Player::new(Point3::new(0.0, 64.0, 0.0), 10.0, 60.0);
+    let mut player = player::Player::new(Vector3::new(0.0, 64.0, 0.0), 10.0, 60.0);
 
     let thread_pool = rayon::ThreadPoolBuilder::new().build().unwrap();
     let mut terrain = terrain::Terrain::new();
@@ -108,7 +104,7 @@ fn main() {
                 last_render_time = now;
                 let terrain_changes = player.update(&mut camera, dt, &input, &terrain);
 
-                let terrain_changes = terrain.update(player.chunk_position, terrain_changes, &gpu.device, &thread_pool);
+                let terrain_changes = terrain.update(player.chunk_position, terrain_changes, &thread_pool);
                 terrain_mesh.update(&terrain_changes, &terrain, player.chunk_position, &gpu.device, &thread_pool);
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame

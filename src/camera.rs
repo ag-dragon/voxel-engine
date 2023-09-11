@@ -9,7 +9,7 @@ pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
 
 #[derive(Debug)]
 pub struct Camera {
-    pub position: Point3<f32>,
+    pub position: Vector3<f32>,
     pub yaw: f32,
     pub pitch: f32,
     aspect: f32,
@@ -19,7 +19,7 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(position: Point3<f32>, yaw: f32, pitch: f32,
+    pub fn new(position: Vector3<f32>, yaw: f32, pitch: f32,
         aspect: f32, fovy: f32, znear: f32, zfar: f32) -> Self {
         Self {
             position,
@@ -42,9 +42,8 @@ impl Camera {
         );
 
         Matrix4::look_at_rh(
-            &self.position,
-            &(self.position + look.normalize()),
-            //&Point3::from_homogenous(Vector4::new(look.x, look.y, look.z, look.nor)),
+            &Point3::from(self.position),
+            &Point3::from(self.position + look.normalize()),
             &Vector3::new(0.0, 1.0, 0.0),
         )
     }
