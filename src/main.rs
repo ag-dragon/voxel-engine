@@ -109,7 +109,7 @@ fn main() {
 
                 input.update_mouse(0.0, 0.0); // Mouse needs to get reset at end of frame
                 
-                match renderer.render(&gpu, &camera, &terrain_mesh.get_meshes()[..]) {
+                match renderer.render(&gpu, &camera, &terrain_mesh.get_opaque_meshes()[..], &terrain_mesh.get_transparent_meshes()[..]) {
                     Ok(_) => {}
                     Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     Err(e) => eprintln!("{:?}", e),

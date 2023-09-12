@@ -138,7 +138,7 @@ impl Renderer {
                     entry_point: "fs_main",
                     targets: &[Some(wgpu::ColorTargetState {
                         format: gpu.config.format,
-                        blend: Some(wgpu::BlendState::REPLACE),
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
                 }),
@@ -176,7 +176,7 @@ impl Renderer {
         }
     }
 
-    pub fn render(&self, gpu: &gpu_state::GpuState, camera: &camera::Camera, meshes: &[&mesh::Mesh]) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&self, gpu: &gpu_state::GpuState, camera: &camera::Camera, meshes: &[&mesh::Mesh], transparent_meshes: &[&mesh::Mesh]) -> Result<(), wgpu::SurfaceError> {
         {
             let global_uniforms = GlobalUniforms {
                 view_proj: (camera.proj_matrix() * camera.view_matrix()).into(),
@@ -225,6 +225,12 @@ impl Renderer {
             render_pass.set_bind_group(1, &self.global_uniform_bind_group, &[]);
 
             for mesh in meshes {
+                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
+            }
+
+            for mesh in transparent_meshes {
                 render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
                 render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                 render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);

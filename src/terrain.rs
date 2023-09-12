@@ -70,7 +70,7 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
                 let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + y as i32) as f64;
                 if block_height <= 40.0 {
                     //water goes here
-                    blocks[i] = BlockType::Stone;
+                    blocks[i] = BlockType::Water;
                 }
             },
             _ => {},
@@ -83,6 +83,7 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
             for y in 0..CHUNK_SIZE {
                 match blocks[x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] {
                     BlockType::Air => {},
+                    BlockType::Water => {},
                     _ => {
                         max_y = y;
                         not_air = true;
@@ -377,105 +378,138 @@ impl Terrain {
     }
 }
 
+pub struct ChunkMeshResponse {
+    opaque_mesh: CMesh,
+    transparent_mesh: CMesh,
+}
+
 // function used by worker threads
-pub fn mesh_chunk(chunk_pos: Vector3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> CMesh {
-    let mut chunk_vertices: Vec<MeshVertex> = Vec::new();
-    let mut chunk_indices: Vec<u32> = Vec::new();
-    let mut o: u32 = 0;
+pub fn mesh_chunk(chunk_pos: Vector3<i32>, chunk: Chunk, neighbors: &[Chunk]) -> ChunkMeshResponse {
+    let mut opaque_chunk_vertices: Vec<MeshVertex> = Vec::new();
+    let mut opaque_chunk_indices: Vec<u32> = Vec::new();
+    let mut oo: u32 = 0;
+    let mut transparent_chunk_vertices: Vec<MeshVertex> = Vec::new();
+    let mut transparent_chunk_indices: Vec<u32> = Vec::new();
+    let mut to: u32 = 0;
 
     for (i, block) in chunk.blocks.into_iter().enumerate() {
-        match block {
-            BlockType::Air => {},
-            _ => {
-                for face in BlockFace::iterator() {
-                    let block_pos = vector![
-                        i % CHUNK_SIZE,
-                        (i / CHUNK_SIZE) % CHUNK_SIZE,
-                        i / (CHUNK_SIZE*CHUNK_SIZE),
-                    ];
-                    let mut n = block_pos.cast::<i32>();
-                    match face {
-                        BlockFace::Top => n.y += 1,
-                        BlockFace::Bottom => n.y -= 1,
-                        BlockFace::Front => n.z += 1,
-                        BlockFace::Back => n.z -= 1,
-                        BlockFace::Right => n.x += 1,
-                        BlockFace::Left => n.x -= 1,
-                    }
-                    match chunk.get_block_border(neighbors, n) {
-                        BlockType::Air => {
-                            chunk_vertices.extend(
-                                face.get_vertices().into_iter().map(|v| {
-                                    let mut ao = 0.0;
-                                    let n1 = vector![
-                                        block_pos.x as i32 + (v.position[0] * 2.0) as i32,
-                                        block_pos.y as i32 + (v.position[1] * 2.0) as i32,
-                                        block_pos.z as i32,
-                                    ];
-                                    let n2 = vector![
-                                        block_pos.x as i32,
-                                        block_pos.y as i32 + (v.position[1] * 2.0) as i32,
-                                        block_pos.z as i32 + (v.position[2] * 2.0) as i32,
-                                    ];
-                                    let n3 = vector![
-                                        block_pos.x as i32 + (v.position[0] * 2.0) as i32,
-                                        block_pos.y as i32 + (v.position[1] * 2.0) as i32,
-                                        block_pos.z as i32 + (v.position[2] * 2.0) as i32,
-                                    ];
-
-                                    let mut cv = false;
-                                    if chunk.get_block_border(neighbors, n1).opaque() {
-                                        ao += 1.0;
-                                        cv = true;
-                                    }
-                                    if chunk.get_block_border(neighbors, n2).opaque() {
-                                        ao += 1.0;
-                                        cv = true;
-                                    }
-                                    if cv && chunk.get_block_border(neighbors, n3).opaque() {
-                                        ao += 1.0;
-                                    }
-                                    
-
-                                    MeshVertex {
-                                        position: [
-                                            (chunk_pos.x * CHUNK_SIZE as i32) as f32
-                                                + v.position[0] + (i % CHUNK_SIZE) as f32,
-                                            (chunk_pos.y * CHUNK_SIZE as i32) as f32
-                                                + v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
-                                            (chunk_pos.z * CHUNK_SIZE as i32) as f32
-                                                + v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
-                                        ],
-                                        tex_coords: [
-                                            (block.texture(face) % 16) as f32 * 0.0625
-                                                + (v.tex_coords[0] * 0.0625),
-                                            (block.texture(face) / 16) as f32 * 0.0625
-                                                + (v.tex_coords[1] * 0.0625),
-                                        ],
-                                        normal: v.normal,
-                                        ao,
-                                    }
-                                })
-                            );
-                            chunk_indices.extend_from_slice(&[o+0,o+2,o+1,o+2,o+3,o+1]);
-                            o += 4;
-                        },
-                        _ => {},
-                    };
+        if block.opaque() || block.transparent() {
+            for face in BlockFace::iterator() {
+                let block_pos = vector![
+                    i % CHUNK_SIZE,
+                    (i / CHUNK_SIZE) % CHUNK_SIZE,
+                    i / (CHUNK_SIZE*CHUNK_SIZE),
+                ];
+                let mut n = block_pos.cast::<i32>();
+                match face {
+                    BlockFace::Top => n.y += 1,
+                    BlockFace::Bottom => n.y -= 1,
+                    BlockFace::Front => n.z += 1,
+                    BlockFace::Back => n.z -= 1,
+                    BlockFace::Right => n.x += 1,
+                    BlockFace::Left => n.x -= 1,
                 }
-            },
+                let neighbor = chunk.get_block_border(neighbors, n);
+                if !neighbor.opaque() && neighbor != block {
+                    if block.opaque() {
+                        opaque_chunk_vertices.extend(
+                            face.get_vertices().into_iter().map(|v| {
+                                let mut ao = 0.0;
+                                let n1 = vector![
+                                    block_pos.x as i32 + (v.position[0] * 2.0) as i32,
+                                    block_pos.y as i32 + (v.position[1] * 2.0) as i32,
+                                    block_pos.z as i32,
+                                ];
+                                let n2 = vector![
+                                    block_pos.x as i32,
+                                    block_pos.y as i32 + (v.position[1] * 2.0) as i32,
+                                    block_pos.z as i32 + (v.position[2] * 2.0) as i32,
+                                ];
+                                let n3 = vector![
+                                    block_pos.x as i32 + (v.position[0] * 2.0) as i32,
+                                    block_pos.y as i32 + (v.position[1] * 2.0) as i32,
+                                    block_pos.z as i32 + (v.position[2] * 2.0) as i32,
+                                ];
+
+                                let mut cv = false;
+                                if chunk.get_block_border(neighbors, n1).opaque() {
+                                    ao += 1.0;
+                                    cv = true;
+                                }
+                                if chunk.get_block_border(neighbors, n2).opaque() {
+                                    ao += 1.0;
+                                    cv = true;
+                                }
+                                if cv && chunk.get_block_border(neighbors, n3).opaque() {
+                                    ao += 1.0;
+                                }
+                                
+
+                                MeshVertex {
+                                    position: [
+                                        (chunk_pos.x * CHUNK_SIZE as i32) as f32
+                                            + v.position[0] + (i % CHUNK_SIZE) as f32,
+                                        (chunk_pos.y * CHUNK_SIZE as i32) as f32
+                                            + v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
+                                        (chunk_pos.z * CHUNK_SIZE as i32) as f32
+                                            + v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
+                                    ],
+                                    tex_coords: [
+                                        (block.texture(face) % 16) as f32 * 0.0625
+                                            + (v.tex_coords[0] * 0.0625),
+                                        (block.texture(face) / 16) as f32 * 0.0625
+                                            + (v.tex_coords[1] * 0.0625),
+                                    ],
+                                    normal: v.normal,
+                                    ao,
+                                }
+                            })
+                        );
+                        opaque_chunk_indices.extend_from_slice(&[oo+0,oo+2,oo+1,oo+2,oo+3,oo+1]);
+                        oo += 4;
+                    } else if block.transparent() {
+                        transparent_chunk_vertices.extend(
+                            face.get_vertices().into_iter().map(|v| {
+                                MeshVertex {
+                                    position: [
+                                        (chunk_pos.x * CHUNK_SIZE as i32) as f32
+                                            + v.position[0] + (i % CHUNK_SIZE) as f32,
+                                        (chunk_pos.y * CHUNK_SIZE as i32) as f32
+                                            + v.position[1] + ((i / CHUNK_SIZE) % CHUNK_SIZE) as f32,
+                                        (chunk_pos.z * CHUNK_SIZE as i32) as f32
+                                            + v.position[2] + (i / (CHUNK_SIZE*CHUNK_SIZE)) as f32,
+                                    ],
+                                    tex_coords: [
+                                        (block.texture(face) % 16) as f32 * 0.0625
+                                            + (v.tex_coords[0] * 0.0625),
+                                        (block.texture(face) / 16) as f32 * 0.0625
+                                            + (v.tex_coords[1] * 0.0625),
+                                    ],
+                                    normal: v.normal,
+                                    ao: 0.0,
+                                }
+                            })
+                        );
+                        transparent_chunk_indices.extend_from_slice(&[to+0,to+2,to+1,to+2,to+3,to+1]);
+                        to += 4;
+                    }
+                }
+            }
         }
-
     }
-
-    CMesh::new(&chunk_vertices, &chunk_indices)
+    
+    ChunkMeshResponse {
+        opaque_mesh: CMesh::new(&opaque_chunk_vertices, &opaque_chunk_indices),
+        transparent_mesh: CMesh::new(&transparent_chunk_vertices, &transparent_chunk_indices),
+    }
 }
 
 pub struct TerrainMesh {
     player_chunk: Vector3<i32>,
     meshed_chunks: HashMap<Vector3<i32>, Mesh>,
-    meshing_tx: mpsc::Sender<(Vector3<i32>, CMesh)>,
-    meshing_rx: mpsc::Receiver<(Vector3<i32>, CMesh)>,
+    meshed_chunks_transparent: HashMap<Vector3<i32>, Mesh>,
+    meshing_tx: mpsc::Sender<(Vector3<i32>, ChunkMeshResponse)>,
+    meshing_rx: mpsc::Receiver<(Vector3<i32>, ChunkMeshResponse)>,
     meshes_todo: VecDeque<Vector3<i32>>,
 }
 
@@ -483,12 +517,14 @@ impl TerrainMesh {
     pub fn new() -> Self {
         let player_chunk = vector![0, 0, 0];
         let meshed_chunks: HashMap<Vector3<i32>, Mesh> = HashMap::new();
+        let meshed_chunks_transparent: HashMap<Vector3<i32>, Mesh> = HashMap::new();
         let (meshing_tx, meshing_rx) = mpsc::channel();
         let meshes_todo: VecDeque<Vector3<i32>> = VecDeque::new();
 
         Self {
             player_chunk,
             meshed_chunks,
+            meshed_chunks_transparent,
             meshing_tx,
             meshing_rx,
             meshes_todo,
@@ -503,12 +539,27 @@ impl TerrainMesh {
 
     pub fn remove_chunk(&mut self, chunk_pos: Vector3<i32>) {
         self.meshed_chunks.remove(&chunk_pos);
+        self.meshed_chunks_transparent.remove(&chunk_pos);
         self.meshes_todo.retain(|chunk| *chunk != chunk_pos);
     }
 
-    pub fn get_meshes(&self) -> Vec<&Mesh> {
+    pub fn get_opaque_meshes(&self) -> Vec<&Mesh> {
         let mut render_meshes = Vec::new();
         for (_, mesh) in &self.meshed_chunks {
+            render_meshes.push(mesh);
+        }
+        render_meshes
+    }
+
+    pub fn get_transparent_meshes(&self) -> Vec<&Mesh> {
+        let mut sorted_meshes = Vec::new();
+        for chunk in &self.meshed_chunks_transparent {
+            sorted_meshes.push(chunk);
+        }
+        let p_pos = self.player_chunk;
+        sorted_meshes.sort_by(|a, b| (b.0-p_pos).cast::<f32>().norm().partial_cmp(&(a.0-p_pos).cast::<f32>().norm()).unwrap());
+        let mut render_meshes = Vec::new();
+        for (p, mesh) in sorted_meshes {
             render_meshes.push(mesh);
         }
         render_meshes
@@ -622,10 +673,11 @@ impl TerrainMesh {
         }
 
         // TODO: limit this to a certain number per second based on delta time, similar to veloren
-        let completed_meshes: Vec<(Vector3<i32>, CMesh)> = self.meshing_rx.try_iter().collect();
-        for (chunk, mesh) in completed_meshes {
+        let completed_meshes: Vec<(Vector3<i32>, ChunkMeshResponse)> = self.meshing_rx.try_iter().collect();
+        for (chunk, response) in completed_meshes {
             if terrain_data.chunk_map.contains_key(&chunk) {
-                self.insert_chunk(chunk, Mesh::new(device, &mesh));
+                self.insert_chunk(chunk, Mesh::new(device, &response.opaque_mesh));
+                self.meshed_chunks_transparent.insert(chunk, Mesh::new(device, &response.transparent_mesh));
             }
         }
     }

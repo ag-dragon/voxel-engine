@@ -10,6 +10,7 @@ pub enum BlockType {
     Sand,
     Wood,
     Leaves,
+    Water,
 }
 
 impl BlockType {
@@ -29,6 +30,7 @@ impl BlockType {
                 _ => 6,
             },
             BlockType::Leaves => 7,
+            BlockType::Water => 8,
             _ => 255, // Missing Texture
         }
     }
@@ -36,7 +38,17 @@ impl BlockType {
     pub fn opaque(&self) -> bool {
         match *self {
             BlockType::Air => false,
+            BlockType::Leaves => false,
+            BlockType::Water => false,
             _ => true,
+        }
+    }
+
+    pub fn transparent(&self) -> bool {
+        match *self {
+            BlockType::Leaves => true,
+            BlockType::Water => true,
+            _ => false,
         }
     }
 }
