@@ -94,6 +94,12 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
                 let block_height = ((chunk_pos.y * CHUNK_SIZE as i32) + max_y as i32) as f64;
                 if block_height < 42.0 {
                     blocks[x + max_y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Sand;
+                    if max_y >= 2 {
+                        blocks[x + (max_y-1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Sand;
+                        blocks[x + (max_y-2)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Sand;
+                    } else if max_y >= 1 {
+                        blocks[x + (max_y-1)*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Sand;
+                    }
                 } else {
                     blocks[x + max_y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Grass;
                     if max_y >= 2 {
@@ -126,10 +132,12 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
                                     if ((x as i32+lx) as usize) < CHUNK_SIZE && (x as i32+lx) as usize >= 0
                                     && ((z as i32+lz) as usize) < CHUNK_SIZE && (z as i32+lz) as usize >= 0
                                     && y+leaf_height < CHUNK_SIZE {
-                                        blocks[
-                                            (x as i32+lx) as usize
+                                        let block_pos = (x as i32+lx) as usize
                                             + (y+leaf_height)*CHUNK_SIZE
-                                            + (z as i32+lz) as usize*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Leaves;
+                                            + (z as i32+lz) as usize*CHUNK_SIZE*CHUNK_SIZE;
+                                        if blocks[block_pos] == BlockType::Air {
+                                            blocks[block_pos] = BlockType::Leaves;
+                                        }
                                     }
                                 }
                             }
@@ -140,10 +148,12 @@ pub fn gen_chunk(chunk_pos: Vector3<i32>) -> ChunkGenResponse {
                                     if ((x as i32+lx) as usize) < CHUNK_SIZE && (x as i32+lx) as usize >= 0
                                     && ((z as i32+lz) as usize) < CHUNK_SIZE && (z as i32+lz) as usize >= 0
                                     && y+6 < CHUNK_SIZE {
-                                        blocks[
-                                            (x as i32+lx) as usize
+                                        let block_pos = (x as i32+lx) as usize
                                             + (y+6)*CHUNK_SIZE
-                                            + (z as i32+lz) as usize*CHUNK_SIZE*CHUNK_SIZE] = BlockType::Leaves;
+                                            + (z as i32+lz) as usize*CHUNK_SIZE*CHUNK_SIZE;
+                                        if blocks[block_pos] == BlockType::Air {
+                                            blocks[block_pos] = BlockType::Leaves;
+                                        }
                                     }
                             }
                         }

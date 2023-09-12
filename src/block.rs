@@ -38,7 +38,6 @@ impl BlockType {
     pub fn opaque(&self) -> bool {
         match *self {
             BlockType::Air => false,
-            BlockType::Leaves => false,
             BlockType::Water => false,
             _ => true,
         }
@@ -46,7 +45,6 @@ impl BlockType {
 
     pub fn transparent(&self) -> bool {
         match *self {
-            BlockType::Leaves => true,
             BlockType::Water => true,
             _ => false,
         }
